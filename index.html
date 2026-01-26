@@ -199,6 +199,30 @@
             overflow-y: auto;
         }
         
+        .modal-content.max-w-5xl {
+            max-width: 64rem;
+            width: 95%;
+        }
+        
+        .modal-content.max-w-6xl {
+            max-width: 72rem;
+            width: 95%;
+        }
+        
+        .modal-content.max-w-7xl {
+            max-width: 80rem;
+            width: 95%;
+        }
+        
+        @media (max-width: 1024px) {
+            .modal-content.max-w-7xl,
+            .modal-content.max-w-6xl,
+            .modal-content.max-w-5xl {
+                width: 98%;
+                max-width: 98%;
+            }
+        }
+        
         /* Notifications Badge */
         .notification-badge {
             position: absolute;
@@ -714,6 +738,22 @@
             missionConfirmed: "تم تأكيد الحضور",
             missionRejected: "تم رفض الحضور",
             
+            // إضافة موظفين بالجملة
+            addMultipleEmployees: "إضافة عدة موظفين",
+            bulkAddTitle: "إضافة موظفين بالجملة",
+            pasteFromExcel: "لصق من Excel",
+            pasteInstructions: "الصق البيانات من Excel (الأعمدة: الاسم، النوع، الهاتف، المنصب/المهنة)",
+            pasteDirectlyInCells: "يمكنك اللصق مباشرة في أي خلية في الجدول",
+            addRow: "إضافة صف",
+            clearAll: "مسح الكل",
+            rowNumber: "#",
+            typeMonthly: "شهري",
+            typeDaily: "يومي",
+            saveAll: "حفظ الكل",
+            employeesAdded: "تم إضافة الموظفين بنجاح",
+            noDataToSave: "لا توجد بيانات للحفظ",
+            fillRequiredFields: "يرجى ملء الحقول المطلوبة (الاسم والنوع)",
+            
             // الآليات - حضور
             worked: "عملت",
             workedPartial: "عملت جزئي",
@@ -950,6 +990,22 @@
             missionFrom: "From project",
             missionConfirmed: "Attendance confirmed",
             missionRejected: "Attendance rejected",
+            
+            // Bulk Add Employees
+            addMultipleEmployees: "Add Multiple Employees",
+            bulkAddTitle: "Bulk Add Employees",
+            pasteFromExcel: "Paste from Excel",
+            pasteInstructions: "Paste data from Excel (Columns: Name, Type, Phone, Position/Profession)",
+            pasteDirectlyInCells: "You can paste directly into any cell in the table",
+            addRow: "Add Row",
+            clearAll: "Clear All",
+            rowNumber: "#",
+            typeMonthly: "Monthly",
+            typeDaily: "Daily",
+            saveAll: "Save All",
+            employeesAdded: "Employees added successfully",
+            noDataToSave: "No data to save",
+            fillRequiredFields: "Please fill required fields (Name and Type)",
             
             // Vehicles - Attendance
             worked: "Worked",
@@ -1208,7 +1264,15 @@
     }
     
     // فتح المودال
-    function openModal(title, content, footer = '') {
+    function openModal(title, content, footer = '', widthClass = '') {
+        const modalContent = document.querySelector('.modal-content');
+        // إزالة جميع classes العرض السابقة
+        modalContent.classList.remove('max-w-5xl', 'max-w-6xl', 'max-w-7xl');
+        // إضافة class العرض الجديد إذا تم توفيره
+        if (widthClass) {
+            modalContent.classList.add(widthClass);
+        }
+        
         document.getElementById('modal-title').textContent = title;
         document.getElementById('modal-body').innerHTML = content;
         document.getElementById('modal-footer').innerHTML = footer;
@@ -1217,6 +1281,9 @@
     
     // إغلاق المودال
     function closeModal() {
+        const modalContent = document.querySelector('.modal-content');
+        // إزالة جميع classes العرض لإعادة التعيين
+        modalContent.classList.remove('max-w-5xl', 'max-w-6xl', 'max-w-7xl');
         document.getElementById('modal').classList.remove('show');
     }
 
@@ -2256,12 +2323,20 @@
                             <option value="monthly">${t('monthly')}</option>
                         </select>
                     </div>
-                    <button onclick="openEmployeeModal()" class="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition flex items-center gap-2">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-                        </svg>
-                        ${t('addEmployee')}
-                    </button>
+                    <div class="flex gap-2">
+                        <button onclick="openBulkEmployeeModal()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition flex items-center gap-2">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                            </svg>
+                            ${t('addMultipleEmployees')}
+                        </button>
+                        <button onclick="openEmployeeModal()" class="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition flex items-center gap-2">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                            </svg>
+                            ${t('addEmployee')}
+                        </button>
+                    </div>
                 </div>
                 
                 <!-- قائمة الموظفين -->
@@ -2842,6 +2917,558 @@
             
         } catch (error) {
             console.error('Error transferring employee:', error);
+            showToast(t('error'), 'error');
+        }
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════════
+    // إضافة موظفين بالجملة
+    // ═══════════════════════════════════════════════════════════════════════
+    
+    async function openBulkEmployeeModal() {
+        // جلب المشاريع
+        let projects = [];
+        if (currentUserData.role === 'manager') {
+            const snap = await db.collection('projects').get();
+            snap.forEach(doc => {
+                const data = doc.data();
+                if (data.status !== 'hidden') {
+                    projects.push({ id: doc.id, ...data });
+                }
+            });
+        } else {
+            const assignedProjects = currentUserData.assignedProjects || [];
+            if (assignedProjects.length > 0) {
+                const snap = await db.collection('projects').get();
+                snap.forEach(doc => {
+                    const data = doc.data();
+                    if (assignedProjects.includes(doc.id) && data.status !== 'hidden') {
+                        projects.push({ id: doc.id, ...data });
+                    }
+                });
+            }
+        }
+        
+        projects.sort((a, b) => a.name?.localeCompare(b.name, 'ar'));
+        
+        const content = `
+            <form id="bulk-employee-form" class="space-y-4">
+                <!-- اختيار المشروع -->
+                <div class="flex flex-wrap items-center gap-4 p-4 bg-gray-50 rounded-lg">
+                    <div class="flex-1 min-w-[200px]">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">${t('project')} <span class="text-red-500">*</span></label>
+                        <select id="bulk-project" class="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 outline-none" required>
+                            <option value="">${t('selectProject')}</option>
+                            ${projects.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="flex gap-2">
+                        <button type="button" onclick="addBulkRow()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                            </svg>
+                            ${t('addRow')}
+                        </button>
+                        <button type="button" onclick="clearBulkRows()" class="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition">
+                            ${t('clearAll')}
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- تعليمات اللصق -->
+                <div class="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p class="text-sm text-blue-700">
+                        💡 <strong>${t('pasteFromExcel')}:</strong> ${t('pasteInstructions')}
+                    </p>
+                </div>
+                
+                <!-- جدول الموظفين -->
+                <div class="overflow-x-auto max-h-[500px] overflow-y-auto border rounded-lg">
+                    <div class="p-2 bg-blue-50 border-b text-xs text-blue-700">
+                        💡 ${t('pasteFromExcel')}: ${t('pasteInstructions')} - ${t('pasteDirectlyInCells')}
+                    </div>
+                    <table class="w-full" id="bulk-employees-table">
+                        <thead class="bg-gray-100 sticky top-0">
+                            <tr>
+                                <th class="px-3 py-2 text-right text-sm font-medium text-gray-700 w-12">${t('rowNumber')}</th>
+                                <th class="px-3 py-2 text-right text-sm font-medium text-gray-700 min-w-[180px]">${t('name')} <span class="text-red-500">*</span></th>
+                                <th class="px-3 py-2 text-right text-sm font-medium text-gray-700 w-32">${t('type')} <span class="text-red-500">*</span></th>
+                                <th class="px-3 py-2 text-right text-sm font-medium text-gray-700 min-w-[130px]">${t('phone')}</th>
+                                <th class="px-3 py-2 text-right text-sm font-medium text-gray-700 min-w-[150px]">${t('position')}/${t('profession')}</th>
+                                <th class="px-3 py-2 text-center text-sm font-medium text-gray-700 w-12"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="bulk-employees-body">
+                            <!-- سيتم إضافة الصفوف هنا -->
+                        </tbody>
+                    </table>
+                </div>
+            </form>
+        `;
+        
+        const footer = `
+            <button onclick="closeModal()" class="px-4 py-2 border rounded-lg hover:bg-gray-100 transition">${t('cancel')}</button>
+            <button onclick="saveBulkEmployees()" class="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                </svg>
+                ${t('saveAll')}
+            </button>
+        `;
+        
+        openModal(t('bulkAddTitle'), content, footer, 'max-w-7xl');
+        
+        // إضافة 5 صفوف فارغة
+        for (let i = 0; i < 5; i++) {
+            addBulkRow();
+        }
+        
+        // إضافة event listener للصق على الجدول
+        setTimeout(() => {
+            setupBulkTablePaste();
+        }, 100);
+    }
+    
+    let bulkRowCounter = 0;
+    
+    function addBulkRow() {
+        bulkRowCounter++;
+        const tbody = document.getElementById('bulk-employees-body');
+        if (!tbody) return;
+        
+        const tr = document.createElement('tr');
+        tr.id = `bulk-row-${bulkRowCounter}`;
+        tr.className = 'border-b hover:bg-gray-50';
+        tr.innerHTML = `
+            <td class="px-3 py-2 text-center text-gray-500 text-sm">${tbody.children.length + 1}</td>
+            <td class="px-2 py-1">
+                <input type="text" class="bulk-name w-full border rounded px-2 py-1 text-sm focus:ring-2 focus:ring-primary-500 outline-none" placeholder="${t('name')}">
+            </td>
+            <td class="px-2 py-1">
+                <select class="bulk-type w-full border rounded px-2 py-1 text-sm focus:ring-2 focus:ring-primary-500 outline-none">
+                    <option value="">${t('select')}</option>
+                    <option value="monthly">${t('typeMonthly')}</option>
+                    <option value="daily">${t('typeDaily')}</option>
+                </select>
+            </td>
+            <td class="px-2 py-1">
+                <input type="tel" class="bulk-phone w-full border rounded px-2 py-1 text-sm focus:ring-2 focus:ring-primary-500 outline-none" placeholder="${t('phone')}">
+            </td>
+            <td class="px-2 py-1">
+                <input type="text" class="bulk-job w-full border rounded px-2 py-1 text-sm focus:ring-2 focus:ring-primary-500 outline-none" placeholder="${t('position')}/${t('profession')}">
+            </td>
+            <td class="px-2 py-1 text-center">
+                <button type="button" onclick="removeBulkRow('bulk-row-${bulkRowCounter}')" class="text-red-500 hover:text-red-700 p-1">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                    </svg>
+                </button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+        updateBulkRowNumbers();
+    }
+    
+    function removeBulkRow(rowId) {
+        const row = document.getElementById(rowId);
+        if (row) {
+            row.remove();
+            updateBulkRowNumbers();
+        }
+    }
+    
+    function clearBulkRows() {
+        const tbody = document.getElementById('bulk-employees-body');
+        if (tbody) {
+            tbody.innerHTML = '';
+            bulkRowCounter = 0;
+            // إضافة 5 صفوف فارغة جديدة
+            for (let i = 0; i < 5; i++) {
+                addBulkRow();
+            }
+        }
+    }
+    
+    function updateBulkRowNumbers() {
+        const tbody = document.getElementById('bulk-employees-body');
+        if (!tbody) return;
+        
+        Array.from(tbody.children).forEach((row, index) => {
+            const numCell = row.querySelector('td:first-child');
+            if (numCell) numCell.textContent = index + 1;
+        });
+    }
+    
+    function handleBulkPaste(event) {
+        event.preventDefault();
+        
+        const pastedText = (event.clipboardData || window.clipboardData).getData('text');
+        if (!pastedText) return;
+        
+        const tbody = document.getElementById('bulk-employees-body');
+        if (!tbody) return;
+        
+        // تنظيف النص من أي أحرف غير مرئية
+        const cleanText = pastedText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+        
+        // تقسيم إلى سطور
+        const lines = cleanText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+        
+        if (lines.length === 0) return;
+        
+        // تحليل البيانات: التحقق من البنية
+        // إذا كان كل سطر يحتوي على tab، فهذا يعني جدول (صفوف وأعمدة)
+        // إذا كان كل سطر بدون tab، فهذا يعني عمود واحد
+        const firstLineHasTabs = lines[0].includes('\t');
+        const allLinesHaveTabs = lines.every(line => line.includes('\t'));
+        
+        let addedCount = 0;
+        
+        if (allLinesHaveTabs || firstLineHasTabs) {
+            // جدول كامل أو صفوف متعددة الأعمدة
+            lines.forEach(line => {
+                // فصل الأعمدة بـ tab (Excel يستخدم tab)
+                const cells = line.split('\t').map(cell => cell.trim());
+                
+                if (cells.length > 0 && cells[0]) {
+                    // إضافة صف جديد
+                    addBulkRow();
+                    addedCount++;
+                    
+                    // الحصول على آخر صف تم إضافته
+                    const lastRow = tbody.lastElementChild;
+                    if (lastRow) {
+                        const nameInput = lastRow.querySelector('.bulk-name');
+                        const typeSelect = lastRow.querySelector('.bulk-type');
+                        const phoneInput = lastRow.querySelector('.bulk-phone');
+                        const jobInput = lastRow.querySelector('.bulk-job');
+                        
+                        // ملء البيانات حسب الترتيب: الاسم، النوع، الهاتف، المنصب
+                        if (nameInput && cells[0]) nameInput.value = cells[0];
+                        
+                        if (typeSelect && cells[1]) {
+                            const typeValue = cells[1].toLowerCase();
+                            if (typeValue.includes('شهري') || typeValue.includes('monthly') || typeValue === 'شهري' || typeValue === 'monthly') {
+                                typeSelect.value = 'monthly';
+                            } else if (typeValue.includes('يومي') || typeValue.includes('daily') || typeValue === 'يومي' || typeValue === 'daily') {
+                                typeSelect.value = 'daily';
+                            }
+                        }
+                        
+                        if (phoneInput && cells[2]) phoneInput.value = cells[2];
+                        if (jobInput && cells[3]) jobInput.value = cells[3];
+                    }
+                }
+            });
+        } else {
+            // عمود واحد - كل سطر = اسم موظف جديد
+            lines.forEach(line => {
+                if (line.trim()) {
+                    // إضافة صف جديد
+                    addBulkRow();
+                    addedCount++;
+                    
+                    // الحصول على آخر صف تم إضافته
+                    const lastRow = tbody.lastElementChild;
+                    if (lastRow) {
+                        const nameInput = lastRow.querySelector('.bulk-name');
+                        if (nameInput) {
+                            nameInput.value = line.trim();
+                        }
+                    }
+                }
+            });
+        }
+        
+        // مسح منطقة اللصق
+        const pasteArea = document.getElementById('bulk-paste-area');
+        if (pasteArea) pasteArea.value = '';
+        
+        if (addedCount > 0) {
+            showToast(`${t('added')} ${addedCount} ${t('employees')}`, 'success');
+        }
+    }
+    
+    // إعداد اللصق المباشر في خلايا الجدول
+    function setupBulkTablePaste() {
+        const tbody = document.getElementById('bulk-employees-body');
+        if (!tbody) return;
+        
+        // إضافة event listener للصق على tbody (مع capture phase)
+        tbody.addEventListener('paste', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            // تحديد العنصر المستهدف
+            let target = e.target;
+            
+            // إذا كان العنصر المستهدف input أو select، احصل على td
+            if (target.tagName === 'INPUT' || target.tagName === 'SELECT') {
+                target = target.closest('td');
+            }
+            
+            handleTablePaste(e, target);
+        }, true);
+        
+        // إضافة event listener على مستوى الجدول أيضاً
+        const table = document.getElementById('bulk-employees-table');
+        if (table) {
+            table.addEventListener('paste', function(e) {
+                // فقط إذا لم يتم التعامل معه بالفعل
+                if (!e.target.closest('tbody')) {
+                    e.preventDefault();
+                    handleTablePaste(e);
+                }
+            });
+        }
+    }
+    
+    // معالجة اللصق في الجدول
+    function handleTablePaste(event, targetCell = null) {
+        const pastedText = (event.clipboardData || window.clipboardData).getData('text');
+        if (!pastedText) return;
+        
+        const tbody = document.getElementById('bulk-employees-body');
+        if (!tbody) return;
+        
+        // تنظيف النص
+        const cleanText = pastedText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+        const lines = cleanText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+        
+        if (lines.length === 0) return;
+        
+        // تحديد الخلية المستهدفة
+        let startRow = 0;
+        let startCol = 1; // تخطي عمود الرقم (العمود 0)
+        
+        if (targetCell) {
+            // البحث عن الصف والعمود للخلية المستهدفة
+            const row = targetCell.closest('tr');
+            if (row && tbody.contains(row)) {
+                const rowIndex = Array.from(tbody.children).indexOf(row);
+                if (rowIndex >= 0) {
+                    startRow = rowIndex;
+                }
+                
+                // تحديد العمود
+                const cells = Array.from(row.querySelectorAll('td'));
+                const cellIndex = cells.indexOf(targetCell);
+                if (cellIndex >= 0) {
+                    startCol = cellIndex;
+                }
+            }
+        }
+        
+        // التحقق من وجود tabs (جدول متعدد الأعمدة)
+        const hasTabs = lines.some(line => line.includes('\t'));
+        
+        if (hasTabs) {
+            // جدول متعدد الأعمدة
+            lines.forEach((line, lineIndex) => {
+                const rowIndex = startRow + lineIndex;
+                const cells = line.split('\t').map(cell => cell.trim());
+                
+                // التأكد من وجود صف كافٍ
+                while (tbody.children.length <= rowIndex) {
+                    addBulkRow();
+                }
+                
+                const row = tbody.children[rowIndex];
+                if (row) {
+                    const rowCells = Array.from(row.querySelectorAll('td'));
+                    
+                    // ملء الخلايا بدءاً من العمود المحدد
+                    let colOffset = 0;
+                    cells.forEach((cellValue, cellIndex) => {
+                        let colIndex = startCol + colOffset;
+                        
+                        // تخطي الأعمدة التي لا تحتوي على input/select (مثل عمود الرقم والحذف)
+                        while (colIndex < rowCells.length) {
+                            const td = rowCells[colIndex];
+                            const input = td.querySelector('input, select');
+                            
+                            if (input) {
+                                // وجدنا خلية قابلة للتحرير
+                                if (input.tagName === 'SELECT' && input.classList.contains('bulk-type')) {
+                                    // معالجة نوع الموظف
+                                    const typeValue = cellValue.toLowerCase();
+                                    if (typeValue.includes('شهري') || typeValue.includes('monthly') || typeValue === 'شهري' || typeValue === 'monthly') {
+                                        input.value = 'monthly';
+                                    } else if (typeValue.includes('يومي') || typeValue.includes('daily') || typeValue === 'يومي' || typeValue === 'daily') {
+                                        input.value = 'daily';
+                                    }
+                                } else {
+                                    input.value = cellValue;
+                                }
+                                colOffset++;
+                                break;
+                            } else {
+                                // تخطي هذه الخلية
+                                colOffset++;
+                                colIndex++;
+                            }
+                        }
+                    });
+                }
+            });
+        } else {
+            // عمود واحد - ابدأ من الخلية المستهدفة
+            lines.forEach((line, lineIndex) => {
+                const rowIndex = startRow + lineIndex;
+                
+                // التأكد من وجود صف كافٍ
+                while (tbody.children.length <= rowIndex) {
+                    addBulkRow();
+                }
+                
+                const row = tbody.children[rowIndex];
+                if (row) {
+                    const rowCells = Array.from(row.querySelectorAll('td'));
+                    
+                    // البحث عن أول خلية قابلة للتحرير بدءاً من العمود المحدد
+                    for (let colIndex = startCol; colIndex < rowCells.length; colIndex++) {
+                        const td = rowCells[colIndex];
+                        const input = td.querySelector('input, select');
+                        
+                        if (input) {
+                            if (input.tagName === 'SELECT' && input.classList.contains('bulk-type')) {
+                                // معالجة نوع الموظف
+                                const typeValue = line.toLowerCase();
+                                if (typeValue.includes('شهري') || typeValue.includes('monthly') || typeValue === 'شهري' || typeValue === 'monthly') {
+                                    input.value = 'monthly';
+                                } else if (typeValue.includes('يومي') || typeValue.includes('daily') || typeValue === 'يومي' || typeValue === 'daily') {
+                                    input.value = 'daily';
+                                }
+                            } else {
+                                input.value = line;
+                            }
+                            break; // توقف بعد ملء الخلية الأولى
+                        }
+                    }
+                }
+            });
+        }
+        
+        updateBulkRowNumbers();
+        showToast(`${t('dataUpdated')}`, 'success');
+    }
+    
+    async function saveBulkEmployees() {
+        const projectId = document.getElementById('bulk-project')?.value;
+        if (!projectId) {
+            showToast(t('selectProject'), 'error');
+            return;
+        }
+        
+        const tbody = document.getElementById('bulk-employees-body');
+        if (!tbody) return;
+        
+        // جمع البيانات من الجدول
+        const employees = [];
+        const rows = tbody.querySelectorAll('tr');
+        
+        // التحقق من الأسماء المكررة محلياً وفي قاعدة البيانات
+        const existingSnap = await db.collection('employees').get();
+        const existingNames = new Set();
+        existingSnap.forEach(doc => {
+            const data = doc.data();
+            if (data.name) existingNames.add(data.name.toLowerCase().trim());
+        });
+        
+        const localNames = new Set();
+        let hasErrors = false;
+        
+        rows.forEach((row, index) => {
+            const name = row.querySelector('.bulk-name')?.value?.trim() || '';
+            const type = row.querySelector('.bulk-type')?.value || '';
+            const phone = row.querySelector('.bulk-phone')?.value?.trim() || '';
+            const jobTitle = row.querySelector('.bulk-job')?.value?.trim() || '';
+            
+            if (name && type) {
+                const nameLower = name.toLowerCase();
+                
+                // التحقق من التكرار المحلي
+                if (localNames.has(nameLower)) {
+                    showToast(`${t('employeeNameExists')}: ${name}`, 'error');
+                    hasErrors = true;
+                    return;
+                }
+                
+                // التحقق من التكرار في قاعدة البيانات
+                if (existingNames.has(nameLower)) {
+                    showToast(`${t('employeeNameExists')}: ${name}`, 'error');
+                    hasErrors = true;
+                    return;
+                }
+                
+                localNames.add(nameLower);
+                employees.push({ name, type, phone, jobTitle });
+            } else if (name || type) {
+                // صف يحتوي على بيانات جزئية
+                showToast(`${t('fillRequiredFields')} (${t('rowNumber')} ${index + 1})`, 'error');
+                hasErrors = true;
+            }
+        });
+        
+        if (hasErrors) return;
+        
+        if (employees.length === 0) {
+            showToast(t('noDataToSave'), 'error');
+            return;
+        }
+        
+        try {
+            // جلب العداد الحالي
+            const counterDoc = await db.collection('settings').doc('counters').get();
+            let employeeCounter = counterDoc.exists ? (counterDoc.data().employeeCounter || 0) : 0;
+            
+            // جلب المشروع للحصول على جدول العمل الافتراضي
+            const projectDoc = await db.collection('projects').doc(projectId).get();
+            const projectData = projectDoc.exists ? projectDoc.data() : {};
+            
+            const batch = db.batch();
+            
+            employees.forEach(emp => {
+                employeeCounter++;
+                const code = `EMP-${String(employeeCounter).padStart(4, '0')}`;
+                
+                const docRef = db.collection('employees').doc();
+                batch.set(docRef, {
+                    code,
+                    name: emp.name,
+                    type: emp.type,
+                    phone: emp.phone,
+                    jobTitle: emp.jobTitle,
+                    projectId,
+                    status: 'active',
+                    workSchedule: projectData.defaultSchedule || {
+                        saturday: true, sunday: true, monday: true, tuesday: true, wednesday: true,
+                        thursday: false, friday: false
+                    },
+                    transferHistory: [],
+                    createdBy: currentUser.uid,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+            });
+            
+            // تحديث العداد
+            batch.update(db.collection('settings').doc('counters'), {
+                employeeCounter
+            });
+            
+            // تحديث عدد موظفين المشروع
+            batch.update(db.collection('projects').doc(projectId), {
+                employeesCount: firebase.firestore.FieldValue.increment(employees.length)
+            });
+            
+            await batch.commit();
+            
+            closeModal();
+            showToast(`${t('employeesAdded')} (${employees.length})`, 'success');
+            loadEmployees();
+            
+        } catch (error) {
+            console.error('Error saving bulk employees:', error);
             showToast(t('error'), 'error');
         }
     }
