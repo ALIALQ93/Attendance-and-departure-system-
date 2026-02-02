@@ -223,6 +223,34 @@
             }
         }
         
+        /* طباعة التقارير */
+        @media print {
+            header, #sidebar, #sidebar-overlay {
+                display: none !important;
+            }
+            main {
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+            main .p-6 {
+                padding: 0 !important;
+            }
+            #report-forms {
+                display: none !important;
+            }
+            #report-results {
+                width: 100% !important;
+                max-width: 100% !important;
+            }
+            #report-results .card {
+                box-shadow: none !important;
+                border: 1px solid #e5e7eb !important;
+            }
+            .no-print {
+                display: none !important;
+            }
+        }
+        
         /* Notifications Badge */
         .notification-badge {
             position: absolute;
@@ -638,6 +666,7 @@
             search: "بحث",
             filter: "تصفية",
             export: "تصدير",
+            print: "طباعة",
             close: "إغلاق",
             confirm: "تأكيد",
             back: "رجوع",
@@ -705,6 +734,14 @@
             
             // الحضور
             fullDay: "يوم كامل",
+            actualAttendance: "الحضور الفعلي",
+            partialDays: "أيام جزئية (معادلة)",
+            reportEmployeeType: "نوع الموظفين",
+            equivalentDays: "أيام معادلة",
+            excusedAttendance: "الحضور المؤجور",
+            unexcusedAttendance: "الحضور غير المؤجور",
+            daysInPeriod: "أيام الفترة",
+            actualAttendanceNote: "الحضور المؤجور = يوم كامل + أيام معادلة (الجزئي). الحضور المؤجور + الحضور غير المؤجور = أيام الفترة.",
             partial: "جزئي",
             absent: "غياب",
             excusedAbsent: "غياب بعذر",
@@ -809,6 +846,18 @@
             error: "حدث خطأ",
             confirmDelete: "هل أنت متأكد من الحذف؟",
             unsavedChanges: "يوجد تغييرات غير محفوظة",
+            bulkAttendance: "تسجيل جماعي",
+            bulkAttendanceTitle: "تسجيل حضور جماعي",
+            selectDates: "اختر التاريخ (أو التواريخ)",
+            applyTo: "التطبيق على",
+            applyToAll: "الكل",
+            applyBulk: "تطبيق",
+            bulkApplied: "تم تطبيق الحضور بنجاح",
+            specific: "محدد",
+            bulkDatesHint: "اختر يوم أو أكثر من أيام الأسبوع المعروض",
+            bulkStatusHint: "الحالة التي سيتم تسجيلها لجميع التواريخ المختارة",
+            bulkApplyHint: "تطبيق على الكل أو حدد أسماء محددة",
+            bulkSelectItems: "حدد الأسماء المطلوبة:",
             noData: "لا توجد بيانات",
             
             // الإشعارات
@@ -826,6 +875,9 @@
             projectReport: "تقرير المشروع",
             employeeReport: "تقرير الموظف",
             attendanceRate: "نسبة الحضور",
+            approvedRecords: "سجلات معتمدة",
+            unapprovedRecords: "سجلات غير معتمدة",
+            reportApprovalNote: "التقرير يشمل جميع السجلات. المعتمد منها يُقفل للتعديل (ما عدا المدير).",
             totalDays: "إجمالي الأيام",
             workDays: "أيام العمل",
             absentDays: "أيام الغياب",
@@ -837,6 +889,25 @@
             userRole: "الصلاحية",
             manager: "مدير",
             supervisor: "مشرف",
+            approver: "معتمد",
+            approve: "اعتماد",
+            approveAttendance: "اعتماد الدوام",
+            approved: "معتمد",
+            notApproved: "غير معتمد",
+            approvedBy: "اعتمد بواسطة",
+            approvedAt: "تاريخ الاعتماد",
+            cannotEditAfter24h: "لا يمكن تعديل الدوام بعد مرور 24 ساعة من الإدخال",
+            onlyManagerCanEditApproved: "الدوام معتمد. التعديل للمدير فقط.",
+            approveConfirm: "اعتماد دوام هذا الأسبوع للمشروع الحالي؟",
+            partialApproval: "اعتماد جزئي",
+            unapprove: "إلغاء الاعتماد",
+            approvalAction: "الإجراء",
+            approveAction: "اعتماد المحدد",
+            unapproveAction: "إلغاء الاعتماد (مدير فقط)",
+            approvalConfirmApprove: "اعتماد السجلات المحددة؟",
+            approvalConfirmUnapprove: "إلغاء الاعتماد عن السجلات المحددة؟ (للمدير فقط)",
+            appliedApproval: "تم الاعتماد",
+            appliedUnapprove: "تم إلغاء الاعتماد",
             assignedProjects: "المشاريع المسندة",
             addUser: "إضافة مستخدم",
             editUser: "تعديل المستخدم",
@@ -891,6 +962,7 @@
             search: "Search",
             filter: "Filter",
             export: "Export",
+            print: "Print",
             close: "Close",
             confirm: "Confirm",
             back: "Back",
@@ -958,6 +1030,14 @@
             
             // Attendance
             fullDay: "Full Day",
+            actualAttendance: "Actual Attendance",
+            partialDays: "Partial (equivalent days)",
+            reportEmployeeType: "Employee Type",
+            equivalentDays: "Equivalent days",
+            excusedAttendance: "Excused Attendance",
+            unexcusedAttendance: "Unexcused Attendance",
+            daysInPeriod: "Days in period",
+            actualAttendanceNote: "Excused = full day + equivalent days (partial). Excused + Unexcused = days in period.",
             partial: "Partial",
             absent: "Absent",
             excusedAbsent: "Excused Absent",
@@ -1062,6 +1142,18 @@
             error: "An error occurred",
             confirmDelete: "Are you sure you want to delete?",
             unsavedChanges: "Unsaved changes",
+            bulkAttendance: "Bulk Register",
+            bulkAttendanceTitle: "Bulk Attendance Register",
+            selectDates: "Select date(s)",
+            applyTo: "Apply to",
+            applyToAll: "All",
+            applyBulk: "Apply",
+            bulkApplied: "Attendance applied successfully",
+            specific: "Specific",
+            bulkDatesHint: "Select one or more days from the displayed week",
+            bulkStatusHint: "The status to be recorded for all selected dates",
+            bulkApplyHint: "Apply to all or select specific names",
+            bulkSelectItems: "Select the required names:",
             noData: "No data",
             
             // Notifications
@@ -1079,6 +1171,9 @@
             projectReport: "Project Report",
             employeeReport: "Employee Report",
             attendanceRate: "Attendance Rate",
+            approvedRecords: "Approved records",
+            unapprovedRecords: "Unapproved records",
+            reportApprovalNote: "Report includes all records. Approved records are locked for edit (except manager).",
             totalDays: "Total Days",
             workDays: "Work Days",
             absentDays: "Absent Days",
@@ -1090,6 +1185,25 @@
             userRole: "Role",
             manager: "Manager",
             supervisor: "Supervisor",
+            approver: "Approver",
+            approve: "Approve",
+            approveAttendance: "Approve Attendance",
+            approved: "Approved",
+            notApproved: "Not Approved",
+            approvedBy: "Approved by",
+            approvedAt: "Approved at",
+            cannotEditAfter24h: "Cannot edit attendance after 24 hours from entry",
+            onlyManagerCanEditApproved: "Attendance is approved. Only manager can edit.",
+            approveConfirm: "Approve attendance for this week / current project?",
+            partialApproval: "Partial Approval",
+            unapprove: "Unapprove",
+            approvalAction: "Action",
+            approveAction: "Approve selected",
+            unapproveAction: "Unapprove (manager only)",
+            approvalConfirmApprove: "Approve selected records?",
+            approvalConfirmUnapprove: "Unapprove selected records? (manager only)",
+            appliedApproval: "Approved",
+            appliedUnapprove: "Unapproved",
             assignedProjects: "Assigned Projects",
             addUser: "Add User",
             editUser: "Edit User",
@@ -3965,7 +4079,7 @@
         try {
             // جلب المشاريع
             let projectsQuery = db.collection('projects').where('status', '==', 'active');
-            if (currentUserData.role === 'supervisor' && currentUserData.assignedProjects) {
+            if ((currentUserData.role === 'supervisor' || currentUserData.role === 'approver') && currentUserData.assignedProjects && currentUserData.assignedProjects.length > 0) {
                 projectsQuery = db.collection('projects').where(firebase.firestore.FieldPath.documentId(), 'in', currentUserData.assignedProjects);
             }
             const projectsSnap = await projectsQuery.get();
@@ -3998,8 +4112,23 @@
                                 </div>
                             </div>
                         </div>
-                        <div id="save-status" class="flex items-center gap-2">
-                            <span class="text-green-600 text-sm">✅ ${t('saved')}</span>
+                        <div class="flex items-center gap-3 flex-wrap">
+                            ${(currentUserData.role === 'approver' || currentUserData.role === 'manager') ? `
+                            <button onclick="approveAttendanceWeek()" class="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition flex items-center gap-2 text-sm font-medium">
+                                ✓ ${t('approveAttendance')}
+                            </button>
+                            <button onclick="openBulkApprovalModal()" class="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition flex items-center gap-2 text-sm font-medium border border-amber-400">
+                                📌 ${t('partialApproval')}
+                            </button>
+                            ` : ''}
+                            ${(currentUserData.role === 'supervisor' || currentUserData.role === 'manager') ? `
+                            <button onclick="openBulkAttendanceModal()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2 text-sm font-medium">
+                                📋 ${t('bulkAttendance')}
+                            </button>
+                            ` : ''}
+                            <div id="save-status" class="flex items-center gap-2">
+                                <span class="text-green-600 text-sm">✅ ${t('saved')}</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -4045,7 +4174,7 @@
                     </div>
                     
                     <!-- زر الحفظ -->
-                    <div class="p-4 border-t flex items-center justify-between">
+                    <div class="p-4 border-t flex items-center justify-between flex-wrap gap-2">
                         <div id="changes-count" class="text-sm text-gray-500"></div>
                         <button onclick="saveAttendance()" id="save-btn" class="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50" disabled>
                             💾 ${t('save')}
@@ -4241,6 +4370,11 @@
             // إنشاء الجدول
             const currentWeekDays = weeks[selectedWeek];
             
+            // حفظ للاستخدام في التسجيل الجماعي
+            window.attendanceTableItems = items;
+            window.attendanceCurrentWeekDays = currentWeekDays;
+            window.attendanceWeeks = weeks;
+            
             if (items.length === 0) {
                 container.innerHTML = `
                     <p class="text-center py-8 text-gray-500">
@@ -4379,14 +4513,33 @@
         `;
     }
     
+    function canEditAttendance(key) {
+        const existing = attendanceData[key];
+        if (!existing) return true;
+        if (existing.approved === true && currentUserData.role !== 'manager') return false;
+        if (currentUserData.role === 'approver') return false;
+        if (currentUserData.role === 'supervisor' && existing.id) {
+            const createdAt = existing.createdAt?.toMillis ? existing.createdAt.toMillis() : (existing.createdAt ? new Date(existing.createdAt).getTime() : 0);
+            if (createdAt && (Date.now() - createdAt) > 24 * 60 * 60 * 1000) return false;
+        }
+        return true;
+    }
+    
     async function openAttendancePopup(itemId, itemName, dateStr, type) {
         const statuses = type === 'vehicles' ? attendanceStatuses.vehicle : attendanceStatuses.employee;
         const key = `${itemId}_${dateStr}`;
         const currentData = attendanceChanges[key] || attendanceData[key] || {};
+        const existingRecord = attendanceData[key];
+        const canEdit = canEditAttendance(key);
         const currentStatus = currentData.status || '';
         const currentNote = currentData.note || '';
         const partialDetails = currentData.partialDetails || {};
         const missionDetails = currentData.missionDetails || {};
+        
+        let readOnlyMessage = '';
+        if (!canEdit && existingRecord?.approved) readOnlyMessage = t('onlyManagerCanEditApproved');
+        else if (!canEdit && currentUserData.role === 'supervisor') readOnlyMessage = t('cannotEditAfter24h');
+        else if (!canEdit && currentUserData.role === 'approver') readOnlyMessage = t('approver') + ' - ' + t('notApproved');
         
         const dateParts = dateStr.split('-');
         const formattedDate = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`;
@@ -4415,8 +4568,11 @@
                 <div class="text-center pb-4 border-b">
                     <p class="font-bold text-lg">${itemName}</p>
                     <p class="text-gray-500">${formattedDate}</p>
+                    ${existingRecord?.approved ? `<p class="text-sm text-green-600 mt-1">✓ ${t('approved')}</p>` : ''}
                 </div>
+                ${readOnlyMessage ? `<p class="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm">${readOnlyMessage}</p>` : ''}
                 
+                ${canEdit ? `
                 <div class="grid grid-cols-2 gap-2" id="status-buttons">
                     ${statuses.map(s => `
                         <button onclick="selectAttendanceStatus('${s.key}')"
@@ -4525,6 +4681,7 @@
                         ✓ ${t('save')}
                     </button>
                 </div>
+                ` : ''}
             </div>
         `;
         
@@ -4717,11 +4874,331 @@
         const countEl = document.getElementById('changes-count');
         const statusEl = document.getElementById('save-status');
         
-        btn.disabled = changesCount === 0;
-        countEl.textContent = changesCount > 0 ? `⚠️ ${changesCount} ${t('unsavedChanges')}` : '';
-        statusEl.innerHTML = changesCount > 0 ? 
+        if (btn) btn.disabled = changesCount === 0;
+        if (countEl) countEl.textContent = changesCount > 0 ? `⚠️ ${changesCount} ${t('unsavedChanges')}` : '';
+        if (statusEl) statusEl.innerHTML = changesCount > 0 ? 
             `<span class="text-yellow-600 text-sm">⚠️ ${t('unsavedChanges')}</span>` :
             `<span class="text-green-600 text-sm">✅ ${t('saved')}</span>`;
+    }
+    
+    // تسجيل حضور جماعي
+    function openBulkAttendanceModal() {
+        const items = window.attendanceTableItems || [];
+        const weekDays = window.attendanceCurrentWeekDays || [];
+        
+        if (items.length === 0) {
+            showToast(activeTab === 'vehicles' ? t('noVehicles') : t('noEmployees'), 'error');
+            return;
+        }
+        
+        if (weekDays.length === 0) {
+            showToast(t('select') + ' ' + t('week'), 'error');
+            return;
+        }
+        
+        const statuses = activeTab === 'vehicles' ? attendanceStatuses.vehicle : attendanceStatuses.employee;
+        
+        const content = `
+            <div class="space-y-6 text-base">
+                <!-- التواريخ -->
+                <div class="p-5 bg-gray-50 rounded-xl border border-gray-200">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                        <span class="text-2xl">📅</span> ${t('selectDates')}
+                    </h3>
+                    <p class="text-sm text-gray-600 mb-4">${t('bulkDatesHint')}</p>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                        ${weekDays.map(day => {
+                            const dateStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                            const date = new Date(selectedYear, selectedMonth, day);
+                            const dayName = getDayName(date);
+                            return `
+                                <label class="flex items-center gap-3 p-4 bg-white border-2 border-gray-200 rounded-xl cursor-pointer hover:border-primary-400 hover:bg-primary-50 transition">
+                                    <input type="checkbox" class="bulk-date-checkbox rounded w-5 h-5" value="${dateStr}" name="bulk-dates">
+                                    <span class="font-medium">${day} ${t(dayName)}</span>
+                                </label>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+                
+                <!-- الحالة -->
+                <div class="p-5 bg-gray-50 rounded-xl border border-gray-200">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                        <span class="text-2xl">📋</span> ${t('status')}
+                    </h3>
+                    <p class="text-sm text-gray-600 mb-3">${t('bulkStatusHint')}</p>
+                    <select id="bulk-status" class="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-base focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none">
+                        ${statuses.map(s => `<option value="${s.key}">${s.icon} ${t(s.key)}</option>`).join('')}
+                    </select>
+                </div>
+                
+                <!-- التطبيق على -->
+                <div class="p-5 bg-gray-50 rounded-xl border border-gray-200">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                        <span class="text-2xl">👥</span> ${t('applyTo')}
+                    </h3>
+                    <p class="text-sm text-gray-600 mb-4">${t('bulkApplyHint')}</p>
+                    <div class="space-y-3">
+                        <label class="flex items-center gap-3 p-4 bg-white border-2 border-gray-200 rounded-xl cursor-pointer hover:border-primary-400 hover:bg-primary-50 transition bulk-scope-label">
+                            <input type="radio" name="bulk-scope" value="all" class="bulk-scope-radio w-5 h-5" checked>
+                            <span class="font-semibold text-gray-800">${t('applyToAll')}</span>
+                            <span class="text-gray-500">(${items.length} ${activeTab === 'vehicles' ? t('vehicles') : t('employees')})</span>
+                        </label>
+                        <label class="flex items-center gap-3 p-4 bg-white border-2 border-gray-200 rounded-xl cursor-pointer hover:border-primary-400 hover:bg-primary-50 transition bulk-scope-label">
+                            <input type="radio" name="bulk-scope" value="selected" class="bulk-scope-radio w-5 h-5">
+                            <span class="font-semibold text-gray-800">${t('select')} ${t('specific')}</span>
+                        </label>
+                    </div>
+                    <div class="mt-4 max-h-56 overflow-y-auto border-2 border-gray-200 rounded-xl p-4 bg-white" id="bulk-items-container">
+                        <p class="text-sm text-gray-500 mb-2">${t('bulkSelectItems')}</p>
+                        <div class="space-y-2" id="bulk-items-list">
+                            ${items.map(item => `
+                                <label class="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-gray-100 bulk-item-label">
+                                    <input type="checkbox" class="bulk-item-checkbox rounded w-4 h-4" value="${item.id}" disabled>
+                                    <span class="text-base">${activeTab === 'vehicles' ? (vehicleIcons[item.type] || '') + ' ' : ''}${item.name}</span>
+                                </label>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        const footer = `
+            <button onclick="closeModal()" class="px-6 py-3 border-2 border-gray-300 rounded-xl hover:bg-gray-100 transition font-medium">${t('cancel')}</button>
+            <button onclick="applyBulkAttendance()" class="px-6 py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition font-semibold">
+                ✓ ${t('applyBulk')}
+            </button>
+        `;
+        
+        openModal(t('bulkAttendanceTitle'), content, footer, 'max-w-4xl');
+        
+        // تفعيل/تعطيل checkboxes الموظفين عند تغيير النطاق
+        document.querySelectorAll('.bulk-scope-radio').forEach(radio => {
+            radio.addEventListener('change', function() {
+                const checkboxes = document.querySelectorAll('.bulk-item-checkbox');
+                const useSelected = this.value === 'selected';
+                checkboxes.forEach(cb => {
+                    cb.disabled = !useSelected;
+                    if (!useSelected) cb.checked = false;
+                });
+            });
+        });
+    }
+    
+    function applyBulkAttendance() {
+        const dateCheckboxes = document.querySelectorAll('.bulk-date-checkbox:checked');
+        const status = document.getElementById('bulk-status')?.value;
+        
+        if (!status) {
+            showToast(t('select') + ' ' + t('status'), 'error');
+            return;
+        }
+        
+        if (dateCheckboxes.length === 0) {
+            showToast(t('selectDates'), 'error');
+            return;
+        }
+        
+        const dates = Array.from(dateCheckboxes).map(cb => cb.value);
+        const useAll = document.querySelector('input[name="bulk-scope"][value="all"]')?.checked;
+        const items = window.attendanceTableItems || [];
+        
+        let selectedItems = items;
+        if (!useAll) {
+            const selectedIds = Array.from(document.querySelectorAll('.bulk-item-checkbox:checked')).map(cb => cb.value);
+            if (selectedIds.length === 0) {
+                showToast(t('select') + ' ' + (activeTab === 'vehicles' ? t('vehicles') : t('employees')), 'error');
+                return;
+            }
+            selectedItems = items.filter(item => selectedIds.includes(item.id));
+        }
+        
+        const itemIdKey = activeTab === 'vehicles' ? 'vehicleId' : 'employeeId';
+        
+        let applied = 0;
+        dates.forEach(dateStr => {
+            selectedItems.forEach(item => {
+                const key = `${item.id}_${dateStr}`;
+                attendanceChanges[key] = {
+                    projectId: selectedProject,
+                    [itemIdKey]: item.id,
+                    date: dateStr,
+                    status: status,
+                    note: ''
+                };
+                applied++;
+            });
+        });
+        
+        closeModal();
+        updateSaveButton();
+        loadAttendanceTable();
+        showToast(`${t('bulkApplied')} (${applied})`, 'success');
+    }
+    
+    // اعتماد / إلغاء اعتماد جزئي (مثل التسجيل الجماعي)
+    function openBulkApprovalModal() {
+        if (currentUserData.role !== 'approver' && currentUserData.role !== 'manager') return;
+        if (!selectedProject) {
+            showToast(t('selectProject') || 'Select a project', 'error');
+            return;
+        }
+        const items = window.attendanceTableItems || [];
+        const weekDays = window.attendanceCurrentWeekDays || [];
+        if (items.length === 0) {
+            showToast(activeTab === 'vehicles' ? t('noVehicles') : t('noEmployees'), 'error');
+            return;
+        }
+        if (weekDays.length === 0) {
+            showToast(t('select') + ' ' + t('week'), 'error');
+            return;
+        }
+        const isManager = currentUserData.role === 'manager';
+        const datesHtml = weekDays.map(day => {
+            const dateStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            const date = new Date(selectedYear, selectedMonth, day);
+            const dayName = getDayName(date);
+            return `<label class="flex items-center gap-3 p-4 bg-white border-2 border-gray-200 rounded-xl cursor-pointer hover:border-amber-400 hover:bg-amber-50 transition"><input type="checkbox" class="bulk-approval-date-checkbox rounded w-5 h-5" value="${dateStr}" name="bulk-approval-dates"><span class="font-medium">${day} ${t(dayName)}</span></label>`;
+        }).join('');
+        const unapproveHtml = isManager ? `<label class="flex items-center gap-3 p-4 bg-white border-2 border-gray-200 rounded-xl cursor-pointer hover:border-amber-400 hover:bg-amber-50 transition"><input type="radio" name="bulk-approval-action" value="unapprove" class="w-5 h-5"><span class="font-semibold text-amber-700">✕ ${t('unapproveAction')}</span></label>` : '';
+        const itemsHtml = items.map(item => `<label class="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-gray-100 bulk-approval-item-label"><input type="checkbox" class="bulk-approval-item-checkbox rounded w-4 h-4" value="${item.id}" disabled><span class="text-base">${activeTab === 'vehicles' ? (vehicleIcons[item.type] || '') + ' ' : ''}${item.name}</span></label>`).join('');
+        const content = `
+            <div class="space-y-6 text-base">
+                <div class="p-5 bg-gray-50 rounded-xl border border-gray-200">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                        <span class="text-2xl">📅</span> ${t('selectDates')}
+                    </h3>
+                    <p class="text-sm text-gray-600 mb-4">${t('bulkDatesHint')}</p>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                        ${datesHtml}
+                    </div>
+                </div>
+                <div class="p-5 bg-gray-50 rounded-xl border border-gray-200">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                        <span class="text-2xl">📋</span> ${t('approvalAction')}
+                    </h3>
+                    <div class="space-y-3">
+                        <label class="flex items-center gap-3 p-4 bg-white border-2 border-gray-200 rounded-xl cursor-pointer hover:border-amber-400 hover:bg-amber-50 transition">
+                            <input type="radio" name="bulk-approval-action" value="approve" class="w-5 h-5" checked>
+                            <span class="font-semibold text-emerald-700">✓ ${t('approveAction')}</span>
+                        </label>
+                        ${unapproveHtml}
+                    </div>
+                </div>
+                <div class="p-5 bg-gray-50 rounded-xl border border-gray-200">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                        <span class="text-2xl">👥</span> ${t('applyTo')}
+                    </h3>
+                    <p class="text-sm text-gray-600 mb-4">${t('bulkApplyHint')}</p>
+                    <div class="space-y-3">
+                        <label class="flex items-center gap-3 p-4 bg-white border-2 border-gray-200 rounded-xl cursor-pointer hover:border-amber-400 hover:bg-amber-50 transition">
+                            <input type="radio" name="bulk-approval-scope" value="all" class="bulk-approval-scope-radio w-5 h-5" checked>
+                            <span class="font-semibold text-gray-800">${t('applyToAll')}</span>
+                            <span class="text-gray-500">(${items.length} ${activeTab === 'vehicles' ? t('vehicles') : t('employees')})</span>
+                        </label>
+                        <label class="flex items-center gap-3 p-4 bg-white border-2 border-gray-200 rounded-xl cursor-pointer hover:border-amber-400 hover:bg-amber-50 transition">
+                            <input type="radio" name="bulk-approval-scope" value="selected" class="bulk-approval-scope-radio w-5 h-5">
+                            <span class="font-semibold text-gray-800">${t('select')} ${t('specific')}</span>
+                        </label>
+                    </div>
+                    <div class="mt-4 max-h-56 overflow-y-auto border-2 border-gray-200 rounded-xl p-4 bg-white" id="bulk-approval-items-container">
+                        <p class="text-sm text-gray-500 mb-2">${t('bulkSelectItems')}</p>
+                        <div class="space-y-2" id="bulk-approval-items-list">
+                            ${itemsHtml}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        const footer = `
+            <button onclick="closeModal()" class="px-6 py-3 border-2 border-gray-300 rounded-xl hover:bg-gray-100 transition font-medium">${t('cancel')}</button>
+            <button onclick="applyBulkApproval()" class="px-6 py-3 bg-amber-600 text-white rounded-xl hover:bg-amber-700 transition font-semibold">
+                ✓ ${t('applyBulk')}
+            </button>
+        `;
+        openModal(t('partialApproval'), content, footer, 'max-w-4xl');
+        document.querySelectorAll('.bulk-approval-scope-radio').forEach(radio => {
+            radio.addEventListener('change', function() {
+                const checkboxes = document.querySelectorAll('.bulk-approval-item-checkbox');
+                const useSelected = this.value === 'selected';
+                checkboxes.forEach(cb => {
+                    cb.disabled = !useSelected;
+                    if (!useSelected) cb.checked = false;
+                });
+            });
+        });
+    }
+    
+    async function applyBulkApproval() {
+        const dateCheckboxes = document.querySelectorAll('.bulk-approval-date-checkbox:checked');
+        const action = document.querySelector('input[name="bulk-approval-action"]:checked')?.value || 'approve';
+        if (dateCheckboxes.length === 0) {
+            showToast(t('selectDates'), 'error');
+            return;
+        }
+        const dates = Array.from(dateCheckboxes).map(cb => cb.value);
+        const useAll = document.querySelector('input[name="bulk-approval-scope"][value="all"]')?.checked;
+        const items = window.attendanceTableItems || [];
+        let selectedItems = items;
+        if (!useAll) {
+            const selectedIds = Array.from(document.querySelectorAll('.bulk-approval-item-checkbox:checked')).map(cb => cb.value);
+            if (selectedIds.length === 0) {
+                showToast(t('select') + ' ' + (activeTab === 'vehicles' ? t('vehicles') : t('employees')), 'error');
+                return;
+            }
+            selectedItems = items.filter(item => selectedIds.includes(item.id));
+        }
+        if (action === 'unapprove' && currentUserData.role !== 'manager') return;
+        const confirmMsg = action === 'approve' ? t('approvalConfirmApprove') : t('approvalConfirmUnapprove');
+        if (!confirm(confirmMsg)) return;
+        const selectedIds = selectedItems.map(i => i.id);
+        const datesSorted = [...dates].sort();
+        const minDate = datesSorted[0];
+        const maxDate = datesSorted[datesSorted.length - 1];
+        const dateSet = new Set(dates);
+        const idSet = new Set(selectedIds);
+        const collections = activeTab === 'vehicles'
+            ? [{ name: 'vehicleAttendance', idField: 'vehicleId' }]
+            : [{ name: 'attendance', idField: 'employeeId' }];
+        try {
+            const writeBatch = db.batch();
+            for (const coll of collections) {
+                const snap = await db.collection(coll.name)
+                    .where('projectId', '==', selectedProject)
+                    .where('date', '>=', minDate)
+                    .where('date', '<=', maxDate)
+                    .get();
+                snap.docs.forEach(doc => {
+                    const d = doc.data();
+                    if (!dateSet.has(d.date) || !idSet.has(d[coll.idField])) return;
+                    if (action === 'approve') {
+                        if (d.approved !== true) {
+                            writeBatch.update(doc.ref, {
+                                approved: true,
+                                approvedBy: currentUser.uid,
+                                approvedAt: firebase.firestore.FieldValue.serverTimestamp()
+                            });
+                        }
+                    } else {
+                        if (d.approved === true) {
+                            writeBatch.update(doc.ref, {
+                                approved: false,
+                                approvedBy: firebase.firestore.FieldValue.delete(),
+                                approvedAt: firebase.firestore.FieldValue.delete()
+                            });
+                        }
+                    }
+                });
+            }
+            await writeBatch.commit();
+            closeModal();
+            showToast(action === 'approve' ? t('appliedApproval') : t('appliedUnapprove'), 'success');
+            await loadAttendanceTable();
+        } catch (err) {
+            console.error('Error bulk approval:', err);
+            showToast(t('error'), 'error');
+        }
     }
     
     async function saveAttendance() {
@@ -4736,18 +5213,23 @@
             const batch = db.batch();
             const missionNotifications = []; // لتجميع الإشعارات
             
+            let hasBlocked = false;
             for (const [key, data] of Object.entries(attendanceChanges)) {
+                const existing = attendanceData[key];
                 if (data._delete) {
-                    // حذف السجل إذا موجود
-                    const existing = attendanceData[key];
+                    if (existing?.id && !canEditAttendance(key)) {
+                        hasBlocked = true;
+                        continue;
+                    }
                     if (existing?.id) {
                         batch.delete(db.collection(collection).doc(existing.id));
                     }
                 } else {
-                    // إضافة أو تحديث
-                    const existing = attendanceData[key];
+                    if (existing?.id && !canEditAttendance(key)) {
+                        hasBlocked = true;
+                        continue;
+                    }
                     let docId;
-                    
                     if (existing?.id) {
                         docId = existing.id;
                         batch.update(db.collection(collection).doc(existing.id), {
@@ -4759,6 +5241,7 @@
                         docId = newDoc.id;
                         batch.set(newDoc, {
                             ...data,
+                            approved: false,
                             createdAt: firebase.firestore.FieldValue.serverTimestamp()
                         });
                     }
@@ -4796,6 +5279,12 @@
                 }
             }
             
+            if (hasBlocked) {
+                showToast(currentUserData.role === 'supervisor' ? t('cannotEditAfter24h') : t('onlyManagerCanEditApproved'), 'error');
+                btn.disabled = false;
+                btn.textContent = `💾 ${t('save')}`;
+                return;
+            }
             await batch.commit();
             
             // إنشاء إشعارات المهمات
@@ -4837,6 +5326,50 @@
             });
         } catch (error) {
             console.error('Error creating mission notification:', error);
+        }
+    }
+    
+    async function approveAttendanceWeek() {
+        if (currentUserData.role !== 'approver' && currentUserData.role !== 'manager') return;
+        if (!selectedProject) {
+            showToast(t('selectProject') || 'Select a project', 'error');
+            return;
+        }
+        if (!confirm(t('approveConfirm'))) return;
+        const weeks = getWeeks(selectedYear, selectedMonth);
+        const currentWeekDays = weeks[selectedWeek] || window.attendanceCurrentWeekDays || [];
+        if (currentWeekDays.length === 0) {
+            showToast(t('error') || 'Error', 'error');
+            return;
+        }
+        const dateStrs = currentWeekDays.map(day =>
+            `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+        );
+        try {
+            const writeBatch = db.batch();
+            const collections = ['attendance', 'vehicleAttendance'];
+            for (const collName of collections) {
+                const snap = await db.collection(collName)
+                    .where('projectId', '==', selectedProject)
+                    .where('date', 'in', dateStrs)
+                    .get();
+                snap.docs.forEach(doc => {
+                    const d = doc.data();
+                    if (d.approved !== true) {
+                        writeBatch.update(doc.ref, {
+                            approved: true,
+                            approvedBy: currentUser.uid,
+                            approvedAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                    }
+                });
+            }
+            await writeBatch.commit();
+            showToast(t('approved'), 'success');
+            await loadAttendanceTable();
+        } catch (err) {
+            console.error('Error approving attendance:', err);
+            showToast(t('error'), 'error');
         }
     }
     
@@ -4895,6 +5428,28 @@
     // التقارير
     // ═══════════════════════════════════════════════════════════════════════
     
+    function printReportInNewTab() {
+        const resultsEl = document.getElementById('report-results');
+        if (!resultsEl || !resultsEl.innerHTML.trim()) {
+            showToast(t('error') || 'Error', 'error');
+            return;
+        }
+        const content = resultsEl.innerHTML.replace(/onclick="[^"]*"/gi, '').replace(/class="[^"]*no-print[^"]*"/gi, 'class="hidden"');
+        const w = window.open('', '_blank');
+        if (!w) {
+            showToast(t('error') || 'Error', 'error');
+            return;
+        }
+        const isRtl = document.documentElement.getAttribute('dir') === 'rtl' || document.documentElement.lang === 'ar';
+        const dir = isRtl ? 'rtl' : 'ltr';
+        const lang = document.documentElement.lang || 'ar';
+        const title = t('projectReport') + ' / ' + t('employeeReport');
+        const prefix = '<!DOCTYPE html><html dir="' + dir + '" lang="' + lang + '"><head><meta charset="utf-8"><title>' + title + '</title><script src="https://cdn.tailwindcss.com"><\/script><style>@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}<\/style></head><body class="p-6 bg-gray-100"><div class="max-w-6xl mx-auto bg-white rounded-xl shadow p-6">';
+        const suffix = '</div><script>window.onload=function(){setTimeout(function(){window.print();},600);};<\/script></body></html>';
+        w.document.write(prefix + content + suffix);
+        w.document.close();
+    }
+    
     async function loadReports() {
         const container = document.getElementById('page-reports');
         
@@ -4930,8 +5485,15 @@
                 }
             });
             
+            // القيم الافتراضية للتقارير: من بداية الشهر الحالي إلى نهاية الشهر الحالي
+            const now = new Date();
+            const firstDayCurr = new Date(now.getFullYear(), now.getMonth(), 1);
+            const lastDayCurr = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+            const reportProjectDefaultFrom = firstDayCurr.getFullYear() + '-' + String(firstDayCurr.getMonth() + 1).padStart(2, '0') + '-' + String(firstDayCurr.getDate()).padStart(2, '0');
+            const reportProjectDefaultTo = lastDayCurr.getFullYear() + '-' + String(lastDayCurr.getMonth() + 1).padStart(2, '0') + '-' + String(lastDayCurr.getDate()).padStart(2, '0');
+            
             container.innerHTML = `
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div id="report-forms" class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <!-- تقرير المشروع -->
                     <div class="card p-6">
                         <h3 class="font-bold text-lg mb-4 flex items-center gap-2">
@@ -4944,16 +5506,22 @@
                                     ${projects.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
                                 </select>
                             </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">${t('reportEmployeeType')}</label>
+                                <select id="report-project-type" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500">
+                                    <option value="all">${t('all')}</option>
+                                    <option value="monthly">${t('monthly')}</option>
+                                    <option value="daily">${t('daily')}</option>
+                                </select>
+                            </div>
                             <div class="grid grid-cols-2 gap-4">
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-1">${t('from')}</label>
-                                    <input type="date" id="report-project-from" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500"
-                                           value="${new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]}">
+                                    <input type="date" id="report-project-from" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500" value="${reportProjectDefaultFrom}">
                                 </div>
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-1">${t('to')}</label>
-                                    <input type="date" id="report-project-to" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500"
-                                           value="${new Date().toISOString().split('T')[0]}">
+                                    <input type="date" id="report-project-to" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500" value="${reportProjectDefaultTo}">
                                 </div>
                             </div>
                             <button onclick="generateProjectReport()" class="w-full py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">
@@ -4977,13 +5545,11 @@
                             <div class="grid grid-cols-2 gap-4">
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-1">${t('from')}</label>
-                                    <input type="date" id="report-employee-from" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500"
-                                           value="${new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]}">
+                                    <input type="date" id="report-employee-from" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500" value="${reportProjectDefaultFrom}">
                                 </div>
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-1">${t('to')}</label>
-                                    <input type="date" id="report-employee-to" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500"
-                                           value="${new Date().toISOString().split('T')[0]}">
+                                    <input type="date" id="report-employee-to" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500" value="${reportProjectDefaultTo}">
                                 </div>
                             </div>
                             <button onclick="generateEmployeeReport()" class="w-full py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">
@@ -5006,10 +5572,32 @@
         }
     }
     
+    // حساب الأيام المعادلة للدوام الجزئي (من تفاصيل الوقت إن وجدت، وإلا 0.5 يوم)
+    function getPartialEquivalentDays(record) {
+        if (record.status !== 'partial' || !record.partialDetails) return 0.5;
+        const pd = record.partialDetails;
+        const arrival = pd.arrivalTime;
+        const leave = pd.leaveTime;
+        if (!arrival || !leave) return 0.5;
+        const parseTime = (t) => {
+            const [h, m] = (t || '0:0').split(':').map(Number);
+            return (h || 0) + (m || 0) / 60;
+        };
+        let hours = Math.max(0, parseTime(leave) - parseTime(arrival));
+        if (pd.breakOut && pd.breakOutTime && pd.breakInTime) {
+            const breakOut = parseTime(pd.breakOutTime);
+            const breakIn = parseTime(pd.breakInTime);
+            hours -= Math.max(0, breakIn - breakOut);
+        }
+        const dayFraction = Math.min(1, Math.max(0, hours / 8));
+        return Math.round(dayFraction * 100) / 100;
+    }
+    
     async function generateProjectReport() {
         const projectId = document.getElementById('report-project').value;
         const fromDate = document.getElementById('report-project-from').value;
         const toDate = document.getElementById('report-project-to').value;
+        const employeeTypeFilter = document.getElementById('report-project-type')?.value || 'all';
         const resultsContainer = document.getElementById('report-results');
         
         resultsContainer.innerHTML = `<div class="text-center py-8"><div class="loader mx-auto"></div></div>`;
@@ -5017,10 +5605,13 @@
         try {
             const project = window.projectsListData?.find(p => p.id === projectId);
             
-            // جلب الموظفين
+            // جلب الموظفين مع فلترة النوع
             const empSnap = await db.collection('employees').where('projectId', '==', projectId).get();
-            const employees = [];
+            let employees = [];
             empSnap.forEach(doc => employees.push({ id: doc.id, ...doc.data() }));
+            if (employeeTypeFilter !== 'all') {
+                employees = employees.filter(e => e.type === employeeTypeFilter);
+            }
             
             // جلب الآليات
             const vehSnap = await db.collection('vehicles').where('projectId', '==', projectId).get();
@@ -5035,91 +5626,195 @@
             const attendance = {};
             attSnap.forEach(doc => {
                 const data = doc.data();
-                // تصفية حسب التاريخ
                 if (data.date >= fromDate && data.date <= toDate) {
                     if (!attendance[data.employeeId]) attendance[data.employeeId] = [];
                     attendance[data.employeeId].push(data);
                 }
             });
             
-            // حساب الإحصائيات
-            let totalPresent = 0, totalAbsent = 0, totalLeave = 0;
+            // عدد أيام الفترة (من - إلى شاملاً)
+            const fromParts = fromDate.split('-').map(Number);
+            const toParts = toDate.split('-').map(Number);
+            const fromD = new Date(fromParts[0], fromParts[1] - 1, fromParts[2]);
+            const toD = new Date(toParts[0], toParts[1] - 1, toParts[2]);
+            const daysInPeriod = Math.max(1, Math.round((toD - fromD) / (24 * 60 * 60 * 1000)) + 1);
+            
+            // الحضور المؤجور = حضور فعلي (يوم كامل + جزئي معادل). الحضور غير المؤجور = أيام الفترة - المؤجور (بحيث المؤجور + غير المؤجور = أيام الفترة)
             const employeeStats = employees.map(emp => {
                 const empAtt = attendance[emp.id] || [];
-                const present = empAtt.filter(a => a.status === 'full_day' || a.status === 'partial').length;
-                const absent = empAtt.filter(a => a.status === 'absent' || a.status === 'excusedAbsent').length;
-                const leave = empAtt.filter(a => a.status?.includes('Leave') || a.status?.includes('leave')).length;
+                const fullDay = empAtt.filter(a => a.status === 'full_day').length;
+                const partialRecords = empAtt.filter(a => a.status === 'partial');
+                const partialCount = partialRecords.length;
+                const partialEquivalentDays = partialRecords.reduce((sum, r) => sum + getPartialEquivalentDays(r), 0);
                 
-                totalPresent += present;
-                totalAbsent += absent;
-                totalLeave += leave;
+                const absent = empAtt.filter(a => a.status === 'absent').length;
+                const excusedAbsent = empAtt.filter(a => a.status === 'excusedAbsent').length;
+                const annualLeave = empAtt.filter(a => a.status === 'annualLeave').length;
+                const sickLeave = empAtt.filter(a => a.status === 'sickLeave').length;
+                const emergencyLeave = empAtt.filter(a => a.status === 'emergencyLeave').length;
+                const unpaidLeave = empAtt.filter(a => a.status === 'unpaidLeave').length;
+                const officialHoliday = empAtt.filter(a => a.status === 'officialHoliday').length;
+                const onMission = empAtt.filter(a => a.status === 'onMission').length;
                 
-                return { ...emp, present, absent, leave, total: empAtt.length };
+                const approvedCount = empAtt.filter(a => a.approved === true).length;
+                const unapprovedCount = empAtt.length - approvedCount;
+                
+                const excusedAttendanceDays = fullDay + partialEquivalentDays + annualLeave + officialHoliday + onMission;
+                const unexcusedAttendanceDays = Math.max(0, daysInPeriod - excusedAttendanceDays);
+                const totalRecorded = empAtt.length;
+                const workDaysInPeriod = totalRecorded || 1;
+                const rate = daysInPeriod > 0 ? Math.round((excusedAttendanceDays / daysInPeriod) * 100) : 0;
+                
+                return {
+                    ...emp,
+                    fullDay,
+                    partialCount,
+                    partialEquivalentDays,
+                    excusedAttendanceDays,
+                    unexcusedAttendanceDays,
+                    daysInPeriod,
+                    absent,
+                    excusedAbsent,
+                    annualLeave,
+                    sickLeave,
+                    emergencyLeave,
+                    unpaidLeave,
+                    officialHoliday,
+                    onMission,
+                    totalRecorded,
+                    approvedCount,
+                    unapprovedCount,
+                    rate
+                };
             });
             
-            const formattedFrom = formatDate(parseDate(fromDate.split('-').reverse().join('-')));
-            const formattedTo = formatDate(parseDate(toDate.split('-').reverse().join('-')));
+            const totals = employeeStats.reduce((acc, e) => ({
+                fullDay: acc.fullDay + e.fullDay,
+                partialCount: acc.partialCount + e.partialCount,
+                partialEquivalentDays: acc.partialEquivalentDays + e.partialEquivalentDays,
+                excusedAttendanceDays: acc.excusedAttendanceDays + e.excusedAttendanceDays,
+                unexcusedAttendanceDays: acc.unexcusedAttendanceDays + e.unexcusedAttendanceDays,
+                absent: acc.absent + e.absent,
+                excusedAbsent: acc.excusedAbsent + e.excusedAbsent,
+                annualLeave: acc.annualLeave + e.annualLeave,
+                sickLeave: acc.sickLeave + e.sickLeave,
+                emergencyLeave: acc.emergencyLeave + e.emergencyLeave,
+                unpaidLeave: acc.unpaidLeave + e.unpaidLeave,
+                officialHoliday: acc.officialHoliday + e.officialHoliday,
+                onMission: acc.onMission + e.onMission,
+                approvedRecords: acc.approvedRecords + e.approvedCount,
+                unapprovedRecords: acc.unapprovedRecords + e.unapprovedCount
+            }), { fullDay: 0, partialCount: 0, partialEquivalentDays: 0, excusedAttendanceDays: 0, unexcusedAttendanceDays: 0, absent: 0, excusedAbsent: 0, annualLeave: 0, sickLeave: 0, emergencyLeave: 0, unpaidLeave: 0, officialHoliday: 0, onMission: 0, approvedRecords: 0, unapprovedRecords: 0 });
+            
+            const typeLabel = employeeTypeFilter === 'all' ? '' : ` (${t(employeeTypeFilter)})`;
             
             resultsContainer.innerHTML = `
                 <div class="card p-6">
-                    <div class="flex items-center justify-between mb-6">
+                    <div class="flex items-center justify-between mb-6 flex-wrap gap-4">
                         <div>
                             <h3 class="font-bold text-xl">${project?.name}</h3>
-                            <p class="text-gray-500">${project?.code} | ${fromDate} - ${toDate}</p>
+                            <p class="text-gray-500">${project?.code} | ${fromDate} - ${toDate}${typeLabel}</p>
                         </div>
-                        <button onclick="window.print()" class="px-4 py-2 border rounded-lg hover:bg-gray-100">
-                            🖨️ ${t('export')}
+                        <button onclick="printReportInNewTab()" class="no-print px-4 py-2 border rounded-lg hover:bg-gray-100">
+                            🖨️ ${t('print')}
                         </button>
                     </div>
                     
-                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                    <div class="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
                         <div class="bg-blue-50 p-4 rounded-lg text-center">
                             <p class="text-2xl font-bold text-blue-600">${employees.length}</p>
-                            <p class="text-sm text-gray-500">${t('employees')}</p>
+                            <p class="text-sm text-gray-500">${t('employees')}${typeLabel}</p>
+                        </div>
+                        <div class="bg-gray-100 p-4 rounded-lg text-center">
+                            <p class="text-2xl font-bold text-gray-700">${daysInPeriod}</p>
+                            <p class="text-sm text-gray-500">${t('daysInPeriod')}</p>
                         </div>
                         <div class="bg-green-50 p-4 rounded-lg text-center">
-                            <p class="text-2xl font-bold text-green-600">${totalPresent}</p>
-                            <p class="text-sm text-gray-500">${t('fullDay')}</p>
+                            <p class="text-2xl font-bold text-green-600">${totals.excusedAttendanceDays.toFixed(2)}</p>
+                            <p class="text-sm text-gray-500">${t('excusedAttendance')}</p>
                         </div>
                         <div class="bg-red-50 p-4 rounded-lg text-center">
-                            <p class="text-2xl font-bold text-red-600">${totalAbsent}</p>
-                            <p class="text-sm text-gray-500">${t('absent')}</p>
+                            <p class="text-2xl font-bold text-red-600">${totals.unexcusedAttendanceDays.toFixed(2)}</p>
+                            <p class="text-sm text-gray-500">${t('unexcusedAttendance')}</p>
+                        </div>
+                        <div class="bg-green-100 p-4 rounded-lg text-center">
+                            <p class="text-xl font-bold text-green-700">${totals.fullDay}</p>
+                            <p class="text-xs text-gray-600">${t('fullDay')}</p>
+                        </div>
+                        <div class="bg-yellow-50 p-4 rounded-lg text-center">
+                            <p class="text-xl font-bold text-yellow-700">${totals.partialEquivalentDays.toFixed(2)}</p>
+                            <p class="text-xs text-gray-600">${t('partialDays')}</p>
                         </div>
                         <div class="bg-orange-50 p-4 rounded-lg text-center">
                             <p class="text-2xl font-bold text-orange-600">${vehicles.length}</p>
                             <p class="text-sm text-gray-500">${t('vehicles')}</p>
                         </div>
+                        <div class="bg-emerald-50 p-4 rounded-lg text-center">
+                            <p class="text-2xl font-bold text-emerald-600">${totals.approvedRecords}</p>
+                            <p class="text-sm text-gray-500">${t('approvedRecords')}</p>
+                        </div>
+                        <div class="bg-amber-50 p-4 rounded-lg text-center">
+                            <p class="text-2xl font-bold text-amber-600">${totals.unapprovedRecords}</p>
+                            <p class="text-sm text-gray-500">${t('unapprovedRecords')}</p>
+                        </div>
                     </div>
+                    <p class="text-sm text-gray-600 mb-4">${t('excusedAttendance')} + ${t('unexcusedAttendance')} = ${t('daysInPeriod')} (${daysInPeriod})</p>
+                    <p class="text-sm text-gray-600 mb-4">${t('reportApprovalNote')} ✓ ${t('approvedRecords')}: ${totals.approvedRecords} | ${t('unapprovedRecords')}: ${totals.unapprovedRecords}</p>
+                    
+                    <p class="text-sm text-gray-600 mb-4">${t('actualAttendanceNote')}</p>
                     
                     <h4 class="font-bold mb-4">${t('employees')} (${employees.length})</h4>
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm">
                             <thead class="bg-gray-50">
                                 <tr>
-                                    <th class="px-4 py-2 text-right">${t('employeeCode')}</th>
-                                    <th class="px-4 py-2 text-right">${t('employeeName')}</th>
-                                    <th class="px-4 py-2 text-right">${t('employeeType')}</th>
-                                    <th class="px-4 py-2 text-center">🟢 ${t('fullDay')}</th>
-                                    <th class="px-4 py-2 text-center">🔴 ${t('absent')}</th>
-                                    <th class="px-4 py-2 text-center">🔵 ${t('annualLeave')}</th>
-                                    <th class="px-4 py-2 text-center">${t('attendanceRate')}</th>
+                                    <th class="px-2 py-2 text-right">${t('employeeCode')}</th>
+                                    <th class="px-2 py-2 text-right">${t('employeeName')}</th>
+                                    <th class="px-2 py-2 text-right">${t('employeeType')}</th>
+                                    <th class="px-2 py-2 text-center">🟢 ${t('fullDay')}</th>
+                                    <th class="px-2 py-2 text-center">🟡 ${t('partial')}</th>
+                                    <th class="px-2 py-2 text-center">📊 ${t('equivalentDays')}</th>
+                                    <th class="px-2 py-2 text-center">🔴 ${t('absent')}</th>
+                                    <th class="px-2 py-2 text-center">🟠 ${t('excusedAbsent')}</th>
+                                    <th class="px-2 py-2 text-center">🔵 ${t('annualLeave')}</th>
+                                    <th class="px-2 py-2 text-center">🟣 ${t('sickLeave')}</th>
+                                    <th class="px-2 py-2 text-center">🩷 ${t('emergencyLeave')}</th>
+                                    <th class="px-2 py-2 text-center">⚪ ${t('unpaidLeave')}</th>
+                                    <th class="px-2 py-2 text-center">⬜ ${t('officialHoliday')}</th>
+                                    <th class="px-2 py-2 text-center">🔷 ${t('onMission')}</th>
+                                    <th class="px-2 py-2 text-center">${t('daysInPeriod')}</th>
+                                    <th class="px-2 py-2 text-center text-emerald-700">✓ ${t('approvedRecords')}</th>
+                                    <th class="px-2 py-2 text-center text-amber-700">○ ${t('unapprovedRecords')}</th>
+                                    <th class="px-2 py-2 text-center font-semibold text-green-700">${t('excusedAttendance')}</th>
+                                    <th class="px-2 py-2 text-center font-semibold text-red-700">${t('unexcusedAttendance')}</th>
+                                    <th class="px-2 py-2 text-center">${t('attendanceRate')}</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y">
-                                ${employeeStats.map(emp => {
-                                    const rate = emp.total > 0 ? Math.round((emp.present / emp.total) * 100) : 0;
-                                    return `
-                                        <tr class="hover:bg-gray-50">
-                                            <td class="px-4 py-2 font-mono">${emp.code}</td>
-                                            <td class="px-4 py-2 font-medium">${emp.name}</td>
-                                            <td class="px-4 py-2">${t(emp.type)}</td>
-                                            <td class="px-4 py-2 text-center text-green-600">${emp.present}</td>
-                                            <td class="px-4 py-2 text-center text-red-600">${emp.absent}</td>
-                                            <td class="px-4 py-2 text-center text-blue-600">${emp.leave}</td>
-                                            <td class="px-4 py-2 text-center font-bold">${rate}%</td>
-                                        </tr>
-                                    `;
-                                }).join('')}
+                                ${employeeStats.map(emp => `
+                                    <tr class="hover:bg-gray-50">
+                                        <td class="px-2 py-2 font-mono">${emp.code}</td>
+                                        <td class="px-2 py-2 font-medium">${emp.name}</td>
+                                        <td class="px-2 py-2">${t(emp.type)}</td>
+                                        <td class="px-2 py-2 text-center text-green-600">${emp.fullDay}</td>
+                                        <td class="px-2 py-2 text-center text-yellow-600">${emp.partialCount}</td>
+                                        <td class="px-2 py-2 text-center">${emp.partialEquivalentDays.toFixed(2)}</td>
+                                        <td class="px-2 py-2 text-center text-red-600">${emp.absent}</td>
+                                        <td class="px-2 py-2 text-center text-orange-600">${emp.excusedAbsent}</td>
+                                        <td class="px-2 py-2 text-center text-blue-600">${emp.annualLeave}</td>
+                                        <td class="px-2 py-2 text-center text-purple-600">${emp.sickLeave}</td>
+                                        <td class="px-2 py-2 text-center">${emp.emergencyLeave}</td>
+                                        <td class="px-2 py-2 text-center text-gray-600">${emp.unpaidLeave}</td>
+                                        <td class="px-2 py-2 text-center">${emp.officialHoliday}</td>
+                                        <td class="px-2 py-2 text-center text-cyan-600">${emp.onMission}</td>
+                                        <td class="px-2 py-2 text-center font-medium">${emp.daysInPeriod}</td>
+                                        <td class="px-2 py-2 text-center text-emerald-600">${emp.approvedCount}</td>
+                                        <td class="px-2 py-2 text-center text-amber-600">${emp.unapprovedCount}</td>
+                                        <td class="px-2 py-2 text-center font-semibold text-green-700">${emp.excusedAttendanceDays.toFixed(2)}</td>
+                                        <td class="px-2 py-2 text-center font-semibold text-red-700">${emp.unexcusedAttendanceDays.toFixed(2)}</td>
+                                        <td class="px-2 py-2 text-center font-bold">${emp.rate}%</td>
+                                    </tr>
+                                `).join('')}
                             </tbody>
                         </table>
                     </div>
@@ -5188,8 +5883,8 @@
                             <h3 class="font-bold text-xl">${employee.name}</h3>
                             <p class="text-gray-500">${employee.code} | ${t(employee.type)} | ${project?.name || '-'}</p>
                         </div>
-                        <button onclick="window.print()" class="px-4 py-2 border rounded-lg hover:bg-gray-100">
-                            🖨️ ${t('export')}
+                        <button onclick="printReportInNewTab()" class="no-print px-4 py-2 border rounded-lg hover:bg-gray-100">
+                            🖨️ ${t('print')}
                         </button>
                     </div>
                     
@@ -5407,6 +6102,7 @@
                     <label class="block text-sm font-medium text-gray-700 mb-1">${t('userRole')} *</label>
                     <select id="user-role" required class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" onchange="toggleProjectsField()">
                         <option value="supervisor" ${user?.role === 'supervisor' ? 'selected' : ''}>${t('supervisor')}</option>
+                        <option value="approver" ${user?.role === 'approver' ? 'selected' : ''}>${t('approver')}</option>
                         <option value="manager" ${user?.role === 'manager' ? 'selected' : ''}>${t('manager')}</option>
                     </select>
                 </div>
