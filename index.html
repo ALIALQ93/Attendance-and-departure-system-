@@ -156,6 +156,40 @@
             transform: scale(1.1);
         }
         
+        /* تقرير الموظف - قائمة بحثية */
+        .report-employee-combobox { position: relative; }
+        .report-employee-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            max-height: 280px;
+            overflow-y: auto;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 50;
+            margin-top: 2px;
+        }
+        .report-employee-dropdown .dropdown-group { padding: 6px 0; }
+        .report-employee-dropdown .dropdown-group-title {
+            padding: 4px 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #6b7280;
+            background: #f9fafb;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .report-employee-dropdown .dropdown-item {
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            transition: background 0.15s;
+        }
+        .report-employee-dropdown .dropdown-item:hover { background: #eff6ff; }
+        .report-employee-dropdown .dropdown-item.no-results { color: #9ca3af; cursor: default; }
+
         /* Dropdown */
         .dropdown-content {
             display: none;
@@ -508,6 +542,12 @@
                         </svg>
                         <span data-translate="users">المستخدمين</span>
                     </a>
+                    <a href="#" onclick="showPage('activityLog')" class="sidebar-item flex items-center gap-3 px-4 py-3 rounded-lg text-gray-700" data-page="activityLog">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2v12m-6 0h6"></path>
+                        </svg>
+                        <span data-translate="activityLog">سجل النشاط</span>
+                    </a>
                 </div>
                 
                 <a href="#" onclick="showPage('settings')" class="sidebar-item flex items-center gap-3 px-4 py-3 rounded-lg text-gray-700" data-page="settings">
@@ -557,6 +597,7 @@
                 </div>
                 
                 <!-- صفحة المستخدمين -->
+                <div id="page-activityLog" class="page-content hidden"></div>
                 <div id="page-users" class="page-content hidden">
                     <!-- سيتم تحميلها ديناميكياً -->
                 </div>
@@ -631,6 +672,27 @@
         nameEn: "Admin",
         role: "manager"
     };
+
+    // تسجيل النشاط (سجل التعديلات والإضافات)
+    async function logActivity(action, entityType, entityId, entityLabel, details) {
+        const user = auth.currentUser;
+        if (!user) return;
+        const userName = (typeof currentUserData !== 'undefined' && currentUserData?.name) ? currentUserData.name : (user.email || user.uid);
+        try {
+            await db.collection('activityLog').add({
+                userId: user.uid,
+                userName: userName,
+                action: action,
+                entityType: entityType,
+                entityId: entityId || '',
+                entityLabel: entityLabel || '',
+                details: details || '',
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        } catch (e) {
+            console.error('logActivity error:', e);
+        }
+    }
 
     // ═══════════════════════════════════════════════════════════════════════
     // الترجمات
@@ -930,7 +992,24 @@
             status: "الحالة",
             actions: "الإجراءات",
             details: "التفاصيل",
-            info: "معلومات"
+            info: "معلومات",
+
+            // سجل النشاط
+            activityLog: "سجل النشاط",
+            activityUser: "المستخدم",
+            activityAction: "الإجراء",
+            activityEntity: "النوع",
+            activityTime: "الوقت",
+            activityDescription: "الوصف",
+            actionCreate: "إضافة",
+            actionUpdate: "تعديل",
+            actionDelete: "حذف",
+            entityProject: "مشروع",
+            entityEmployee: "موظف",
+            entityVehicle: "آلية",
+            entityAttendance: "حضور",
+            entityUser: "مستخدم",
+            noActivityYet: "لا توجد سجلات نشاط حتى الآن"
         },
         en: {
             // Menus
@@ -1226,7 +1305,24 @@
             status: "Status",
             actions: "Actions",
             details: "Details",
-            info: "Info"
+            info: "Info",
+
+            // Activity log
+            activityLog: "Activity Log",
+            activityUser: "User",
+            activityAction: "Action",
+            activityEntity: "Type",
+            activityTime: "Time",
+            activityDescription: "Description",
+            actionCreate: "Create",
+            actionUpdate: "Update",
+            actionDelete: "Delete",
+            entityProject: "Project",
+            entityEmployee: "Employee",
+            entityVehicle: "Vehicle",
+            entityAttendance: "Attendance",
+            entityUser: "User",
+            noActivityYet: "No activity records yet"
         }
     };
 
@@ -1810,6 +1906,9 @@
             case 'reports':
                 loadReports();
                 break;
+            case 'activityLog':
+                loadActivityLog();
+                break;
             case 'users':
                 loadUsers();
                 break;
@@ -2216,6 +2315,7 @@
                     defaultSchedule: { startTime, endTime },
                     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
+                logActivity('update', 'project', id, name, currentLanguage === 'ar' ? 'تعديل مشروع' : 'Project updated');
             } else {
                 // إضافة
                 // الحصول على العداد
@@ -2223,7 +2323,7 @@
                 const counter = (counterDoc.data()?.projectCounter || 0) + 1;
                 const code = generateCode('PRJ', counter);
                 
-                await db.collection('projects').add({
+                const projectRef = await db.collection('projects').add({
                     code,
                     name,
                     contractNumber,
@@ -2241,6 +2341,7 @@
                 await db.collection('settings').doc('counters').update({
                     projectCounter: counter
                 });
+                logActivity('create', 'project', projectRef.id, name, currentLanguage === 'ar' ? 'إضافة مشروع' : 'Project created');
             }
             
             closeModal();
@@ -2345,7 +2446,10 @@
                 return;
             }
             
+            const projectDoc = await db.collection('projects').doc(projectId).get();
+            const projectName = projectDoc.exists ? projectDoc.data().name : projectId;
             await db.collection('projects').doc(projectId).delete();
+            logActivity('delete', 'project', projectId, projectName, currentLanguage === 'ar' ? 'حذف مشروع' : 'Project deleted');
             
             closeModal();
             showToast(t('deleted'), 'success');
@@ -2362,10 +2466,13 @@
         if (!confirm(t('confirmDelete'))) return;
         
         try {
+            const projectDoc = await db.collection('projects').doc(projectId).get();
+            const projectName = projectDoc.exists ? projectDoc.data().name : projectId;
             await db.collection('projects').doc(projectId).update({
                 status: 'hidden',
                 hiddenAt: firebase.firestore.FieldValue.serverTimestamp()
             });
+            logActivity('update', 'project', projectId, projectName, currentLanguage === 'ar' ? 'إخفاء مشروع' : 'Project hidden');
             
             showToast(t('saved'), 'success');
             loadProjects();
@@ -2557,7 +2664,9 @@
             
             // جلب بيانات الموظف لتحديث عداد المشروع
             const empDoc = await db.collection('employees').doc(employeeId).get();
-            const projectId = empDoc.data()?.projectId;
+            const empData = empDoc.data();
+            const projectId = empData?.projectId;
+            const employeeName = empData?.name || employeeId;
             
             // حذف الموظف
             await db.collection('employees').doc(employeeId).delete();
@@ -2568,6 +2677,7 @@
                     employeesCount: firebase.firestore.FieldValue.increment(-1)
                 });
             }
+            logActivity('delete', 'employee', employeeId, employeeName, currentLanguage === 'ar' ? 'حذف موظف' : 'Employee deleted');
             
             showToast(t('deleted'), 'success');
             loadEmployees();
@@ -2804,6 +2914,7 @@
                         employeesCount: firebase.firestore.FieldValue.increment(1)
                     });
                 }
+                logActivity('update', 'employee', id, name, currentLanguage === 'ar' ? 'تعديل موظف' : 'Employee updated');
             } else {
                 // إضافة
                 const counterDoc = await db.collection('settings').doc('counters').get();
@@ -2816,7 +2927,7 @@
                 employeeData.createdBy = currentUser.uid;
                 employeeData.transferHistory = [];
                 
-                await db.collection('employees').add(employeeData);
+                const empRef = await db.collection('employees').add(employeeData);
                 
                 // تحديث العدادات
                 await db.collection('settings').doc('counters').update({
@@ -2825,6 +2936,7 @@
                 await db.collection('projects').doc(projectId).update({
                     employeesCount: firebase.firestore.FieldValue.increment(1)
                 });
+                logActivity('create', 'employee', empRef.id, name, currentLanguage === 'ar' ? 'إضافة موظف' : 'Employee created');
             }
             
             closeModal();
@@ -3024,6 +3136,10 @@
             await db.collection('projects').doc(toProjectId).update({
                 employeesCount: firebase.firestore.FieldValue.increment(1)
             });
+            
+            const empSnap = await db.collection('employees').doc(employeeId).get();
+            const employeeName = empSnap.exists ? empSnap.data().name : employeeId;
+            logActivity('update', 'employee', employeeId, employeeName, currentLanguage === 'ar' ? 'نقل موظف بين المشاريع' : 'Employee transferred');
             
             closeModal();
             showToast(t('saved'), 'success');
@@ -3577,6 +3693,9 @@
             
             await batch.commit();
             
+            const projectName = projectData.name || projectId;
+            logActivity('create', 'employee', projectId, projectName, currentLanguage === 'ar' ? `إضافة ${employees.length} موظف` : `${employees.length} employees added`);
+            
             closeModal();
             showToast(`${t('employeesAdded')} (${employees.length})`, 'success');
             loadEmployees();
@@ -3933,6 +4052,7 @@
                         vehiclesCount: firebase.firestore.FieldValue.increment(1)
                     });
                 }
+                logActivity('update', 'vehicle', id, vehicleData.name, currentLanguage === 'ar' ? 'تعديل آلية' : 'Vehicle updated');
             } else {
                 // إضافة
                 const counterDoc = await db.collection('settings').doc('counters').get();
@@ -3945,7 +4065,7 @@
                 vehicleData.createdBy = currentUser.uid;
                 vehicleData.transferHistory = [];
                 
-                await db.collection('vehicles').add(vehicleData);
+                const vehicleRef = await db.collection('vehicles').add(vehicleData);
                 
                 // تحديث العدادات
                 await db.collection('settings').doc('counters').update({
@@ -3954,6 +4074,7 @@
                 await db.collection('projects').doc(projectId).update({
                     vehiclesCount: firebase.firestore.FieldValue.increment(1)
                 });
+                logActivity('create', 'vehicle', vehicleRef.id, vehicleData.name, currentLanguage === 'ar' ? 'إضافة آلية' : 'Vehicle created');
             }
             
             closeModal();
@@ -5192,6 +5313,8 @@
                 });
             }
             await writeBatch.commit();
+            const projectLabel = window.currentAttendanceData?.projectName || selectedProject || '';
+            logActivity('update', 'attendance', selectedProject || '', projectLabel, action === 'approve' ? (currentLanguage === 'ar' ? 'اعتماد سجلات حضور' : 'Attendance approved') : (currentLanguage === 'ar' ? 'إلغاء اعتماد سجلات حضور' : 'Attendance unapproved'));
             closeModal();
             showToast(action === 'approve' ? t('appliedApproval') : t('appliedUnapprove'), 'success');
             await loadAttendanceTable();
@@ -5287,6 +5410,10 @@
             }
             await batch.commit();
             
+            const savedCount = Object.keys(attendanceChanges).length;
+            const projectLabel = window.currentAttendanceData?.projectName || selectedProject || '';
+            logActivity('update', 'attendance', selectedProject || '', projectLabel, (currentLanguage === 'ar' ? 'حفظ جدول الحضور — ' : 'Saved attendance — ') + savedCount + (currentLanguage === 'ar' ? ' سجل' : ' record(s)'));
+            
             // إنشاء إشعارات المهمات
             for (const mission of missionNotifications) {
                 await createMissionNotification(mission);
@@ -5365,6 +5492,8 @@
                 });
             }
             await writeBatch.commit();
+            const projectLabel = window.currentAttendanceData?.projectName || selectedProject || '';
+            logActivity('update', 'attendance', selectedProject || '', projectLabel, currentLanguage === 'ar' ? 'اعتماد دوام الأسبوع' : 'Week attendance approved');
             showToast(t('approved'), 'success');
             await loadAttendanceTable();
         } catch (err) {
@@ -5484,6 +5613,13 @@
                     employees.push({ id: doc.id, ...data });
                 }
             });
+            // ترتيب الموظفين حسب المشروع ثم الاسم
+            employees.sort((a, b) => {
+                const pA = projects.find(p => p.id === a.projectId)?.name || '';
+                const pB = projects.find(p => p.id === b.projectId)?.name || '';
+                if (pA !== pB) return pA.localeCompare(pB);
+                return (a.name || '').localeCompare(b.name || '');
+            });
             
             // القيم الافتراضية للتقارير: من بداية الشهر الحالي إلى نهاية الشهر الحالي
             const now = new Date();
@@ -5538,9 +5674,11 @@
                         <div class="space-y-4">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">${t('employees')}</label>
-                                <select id="report-employee" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500">
-                                    ${employees.map(e => `<option value="${e.id}">${e.name} (${e.code})</option>`).join('')}
-                                </select>
+                                <div class="report-employee-combobox">
+                                    <input type="hidden" id="report-employee" value="${employees.length ? employees[0].id : ''}">
+                                    <input type="text" id="report-employee-search" autocomplete="off" placeholder="${t('search')} ${t('employeeName')} / ${t('employeeCode')}..." class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500" value="${employees.length ? (employees[0].name + ' (' + (employees[0].code || '') + ')') : ''}">
+                                    <div id="report-employee-dropdown" class="report-employee-dropdown hidden"></div>
+                                </div>
                             </div>
                             <div class="grid grid-cols-2 gap-4">
                                 <div>
@@ -5565,10 +5703,82 @@
             
             window.projectsListData = projects;
             window.employeesListData = employees;
+            initReportEmployeeSearch();
             
         } catch (error) {
             console.error('Error loading reports:', error);
             container.innerHTML = `<p class="text-red-500 text-center py-8">${t('error')}</p>`;
+        }
+    }
+    
+    function initReportEmployeeSearch() {
+        const searchInput = document.getElementById('report-employee-search');
+        const hiddenInput = document.getElementById('report-employee');
+        const dropdown = document.getElementById('report-employee-dropdown');
+        if (!searchInput || !hiddenInput || !dropdown) return;
+        
+        const projects = window.projectsListData || [];
+        const employees = window.employeesListData || [];
+        
+        function esc(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+        
+        function buildDropdownHTML(filter) {
+            const q = (filter || '').trim().toLowerCase();
+            const filtered = q ? employees.filter(e => 
+                (e.name || '').toLowerCase().includes(q) || (e.code || '').toLowerCase().includes(q)
+            ) : employees;
+            const byProject = {};
+            filtered.forEach(e => {
+                const pid = e.projectId || '';
+                if (!byProject[pid]) byProject[pid] = [];
+                byProject[pid].push(e);
+            });
+            const projectOrder = [...new Set(employees.map(e => e.projectId))];
+            let html = '';
+            projectOrder.forEach(pid => {
+                const list = byProject[pid] || [];
+                if (list.length === 0) return;
+                const projectName = pid ? (projects.find(p => p.id === pid)?.name || pid) : (currentLanguage === 'ar' ? 'بدون مشروع' : 'No project');
+                html += '<div class="dropdown-group"><div class="dropdown-group-title">' + esc(projectName) + '</div>';
+                list.forEach(e => {
+                    const label = e.name + ' (' + (e.code || '') + ')';
+                    html += '<div class="dropdown-item" data-employee-id="' + esc(e.id) + '" data-employee-label="' + esc(label) + '">' + esc(label) + '</div>';
+                });
+                html += '</div>';
+            });
+            if (!html) html = '<div class="dropdown-item no-results">' + (currentLanguage === 'ar' ? 'لا توجد نتائج' : 'No results') + '</div>';
+            return html;
+        }
+        
+        function showDropdown() {
+            dropdown.innerHTML = buildDropdownHTML(searchInput.value);
+            dropdown.classList.remove('hidden');
+            dropdown.querySelectorAll('.dropdown-item:not(.no-results)').forEach(el => {
+                el.addEventListener('click', function() {
+                    const id = this.getAttribute('data-employee-id');
+                    const label = this.getAttribute('data-employee-label');
+                    hiddenInput.value = id;
+                    searchInput.value = label;
+                    dropdown.classList.add('hidden');
+                });
+            });
+        }
+        
+        function hideDropdown() { dropdown.classList.add('hidden'); }
+        
+        searchInput.addEventListener('focus', showDropdown);
+        searchInput.addEventListener('input', showDropdown);
+        searchInput.addEventListener('blur', function() { setTimeout(hideDropdown, 200); });
+        dropdown.addEventListener('mousedown', function(e) { e.preventDefault(); });
+        
+        if (!window._reportEmployeeSearchClickOut) {
+            window._reportEmployeeSearchClickOut = true;
+            document.addEventListener('click', function(e) {
+                const box = document.querySelector('.report-employee-combobox');
+                if (!box || box.contains(e.target)) return;
+                const dd = document.getElementById('report-employee-dropdown');
+                if (dd && !dd.classList.contains('hidden')) dd.classList.add('hidden');
+            });
         }
     }
     
@@ -5952,6 +6162,61 @@
     }
     
     // ═══════════════════════════════════════════════════════════════════════
+    // سجل النشاط (للمدير فقط)
+    // ═══════════════════════════════════════════════════════════════════════
+    
+    async function loadActivityLog() {
+        const container = document.getElementById('page-activityLog');
+        container.innerHTML = `<div class="text-center py-8"><div class="loader mx-auto"></div></div>`;
+        try {
+            const snap = await db.collection('activityLog').orderBy('timestamp', 'desc').limit(200).get();
+            const items = [];
+            snap.forEach(doc => items.push({ id: doc.id, ...doc.data() }));
+            const actionLabel = (a) => ({ create: t('actionCreate'), update: t('actionUpdate'), delete: t('actionDelete') }[a] || a);
+            const entityLabel = (e) => ({ project: t('entityProject'), employee: t('entityEmployee'), vehicle: t('entityVehicle'), attendance: t('entityAttendance'), user: t('entityUser') }[e] || e);
+            const formatTime = (ts) => {
+                if (!ts || !ts.toDate) return '—';
+                const d = ts.toDate();
+                return d.toLocaleString(currentLanguage === 'ar' ? 'ar-SA' : 'en-GB', { dateStyle: 'short', timeStyle: 'short' });
+            };
+            container.innerHTML = `
+                <div class="card p-6">
+                    <h2 class="text-xl font-bold mb-4">${t('activityLog')}</h2>
+                    ${items.length === 0 ? `<p class="text-gray-500 text-center py-8">${t('noActivityYet')}</p>` : `
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-right border-collapse">
+                            <thead>
+                                <tr class="border-b border-gray-200">
+                                    <th class="py-3 px-2 font-medium text-gray-600">${t('activityTime')}</th>
+                                    <th class="py-3 px-2 font-medium text-gray-600">${t('activityUser')}</th>
+                                    <th class="py-3 px-2 font-medium text-gray-600">${t('activityAction')}</th>
+                                    <th class="py-3 px-2 font-medium text-gray-600">${t('activityEntity')}</th>
+                                    <th class="py-3 px-2 font-medium text-gray-600">${t('activityDescription')}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${items.map(row => `
+                                    <tr class="border-b border-gray-100 hover:bg-gray-50">
+                                        <td class="py-2 px-2 text-gray-600">${formatTime(row.timestamp)}</td>
+                                        <td class="py-2 px-2 font-medium">${(row.userName || '').replace(/</g, '&lt;')}</td>
+                                        <td class="py-2 px-2">${actionLabel(row.action)}</td>
+                                        <td class="py-2 px-2">${entityLabel(row.entityType)}</td>
+                                        <td class="py-2 px-2 text-gray-700">${((row.entityLabel || '') + (row.details ? ' — ' + row.details : '')).replace(/</g, '&lt;')}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                    `}
+                </div>
+            `;
+        } catch (error) {
+            console.error('Error loading activity log:', error);
+            container.innerHTML = `<p class="text-red-500 text-center py-8">${t('error')}</p>`;
+        }
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════════
     // إدارة المستخدمين (للمدير فقط)
     // ═══════════════════════════════════════════════════════════════════════
     
@@ -6182,6 +6447,7 @@
                     assignedProjects,
                     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
+                logActivity('update', 'user', id, name, currentLanguage === 'ar' ? 'تعديل مستخدم' : 'User updated');
             } else {
                 // إضافة - إنشاء حساب في Auth أولاً
                 const passwordEl = document.getElementById('user-password');
@@ -6202,6 +6468,7 @@
                     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                     createdBy: currentUser.uid
                 });
+                logActivity('create', 'user', userCredential.user.uid, name, currentLanguage === 'ar' ? 'إضافة مستخدم' : 'User created');
                 
                 // إعادة تسجيل دخول المدير الحالي
                 await auth.signInWithEmailAndPassword(currentUser.email, prompt(currentLanguage === 'ar' ? 'أدخل كلمة مرورك لإعادة تسجيل الدخول:' : 'Enter your password to re-login:'));
@@ -6225,7 +6492,10 @@
         if (!confirm(t('confirmDelete'))) return;
         
         try {
+            const userDoc = await db.collection('users').doc(userId).get();
+            const userName = userDoc.exists ? userDoc.data().name : userId;
             await db.collection('users').doc(userId).delete();
+            logActivity('delete', 'user', userId, userName, currentLanguage === 'ar' ? 'حذف مستخدم' : 'User deleted');
             showToast(t('deleted'), 'success');
             loadUsers();
         } catch (error) {
