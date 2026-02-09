@@ -258,6 +258,10 @@
         }
         
         /* طباعة التقارير */
+        @page {
+            size: A4 landscape;
+            margin: 10mm;
+        }
         @media print {
             header, #sidebar, #sidebar-overlay {
                 display: none !important;
@@ -269,6 +273,9 @@
             main .p-6 {
                 padding: 0 !important;
             }
+            .no-print-stats {
+                display: none !important;
+            }
             #report-forms {
                 display: none !important;
             }
@@ -279,6 +286,13 @@
             #report-results .card {
                 box-shadow: none !important;
                 border: 1px solid #e5e7eb !important;
+                padding: 8mm !important;
+            }
+            #report-results table {
+                font-size: 0.7rem !important;
+            }
+            #report-results th, #report-results td {
+                padding: 3px 4px !important;
             }
             .no-print {
                 display: none !important;
@@ -548,6 +562,12 @@
                         </svg>
                         <span data-translate="activityLog">سجل النشاط</span>
                     </a>
+                    <a href="#" onclick="showPage('monthlyWageManagement')" class="sidebar-item flex items-center gap-3 px-4 py-3 rounded-lg text-gray-700" data-page="monthlyWageManagement">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <span data-translate="monthlyWageManagement">إدارة الأجور الشهرية</span>
+                    </a>
                 </div>
                 
                 <a href="#" onclick="showPage('settings')" class="sidebar-item flex items-center gap-3 px-4 py-3 rounded-lg text-gray-700" data-page="settings">
@@ -598,6 +618,7 @@
                 
                 <!-- صفحة المستخدمين -->
                 <div id="page-activityLog" class="page-content hidden"></div>
+                <div id="page-monthlyWageManagement" class="page-content hidden"></div>
                 <div id="page-users" class="page-content hidden">
                     <!-- سيتم تحميلها ديناميكياً -->
                 </div>
@@ -1009,7 +1030,17 @@
             entityVehicle: "آلية",
             entityAttendance: "حضور",
             entityUser: "مستخدم",
-            noActivityYet: "لا توجد سجلات نشاط حتى الآن"
+            noActivityYet: "لا توجد سجلات نشاط حتى الآن",
+            dailyWage: "الأجر اليومي",
+            monthlyWageManagement: "إدارة أجور الموظفين اليوميين",
+            currentDailyWage: "الأجر اليومي الحالي",
+            wageHistory: "سجل الأجور",
+            setMonthlyWage: "تعيين أجر شهري",
+            month: "الشهر",
+            year: "السنة",
+            wageAmount: "مبلغ الأجر",
+            totalSalary: "إجمالي الراتب",
+            salaryCalculation: "حساب الراتب"
         },
         en: {
             // Menus
@@ -1322,7 +1353,17 @@
             entityVehicle: "Vehicle",
             entityAttendance: "Attendance",
             entityUser: "User",
-            noActivityYet: "No activity records yet"
+            noActivityYet: "No activity records yet",
+            dailyWage: "Daily Wage",
+            monthlyWageManagement: "Daily Employees Wage Management",
+            currentDailyWage: "Current Daily Wage",
+            wageHistory: "Wage History",
+            setMonthlyWage: "Set Monthly Wage",
+            month: "Month",
+            year: "Year",
+            wageAmount: "Wage Amount",
+            totalSalary: "Total Salary",
+            salaryCalculation: "Salary Calculation"
         }
     };
 
@@ -1908,6 +1949,9 @@
                 break;
             case 'activityLog':
                 loadActivityLog();
+                break;
+            case 'monthlyWageManagement':
+                loadMonthlyWageManagement();
                 break;
             case 'users':
                 loadUsers();
@@ -2643,30 +2687,41 @@
     
     // حذف موظف
     async function deleteEmployee(employeeId, employeeName) {
-        // التحقق من عدم وجود سجلات حضور
+        // التحقق من وجود سجلات حضور وحذفها تلقائياً (للمدير فقط)
         try {
-            const attendanceCheck = await db.collection('attendance')
+            // جلب بيانات الموظف أولاً
+            const empDoc = await db.collection('employees').doc(employeeId).get();
+            if (!empDoc.exists) {
+                showToast(t('error'), 'error');
+                return;
+            }
+            const empData = empDoc.data();
+            const finalEmployeeName = empData?.name || employeeName || employeeId;
+            const projectId = empData?.projectId;
+            
+            const allAttendanceSnap = await db.collection('attendance')
                 .where('employeeId', '==', employeeId)
-                .limit(1)
                 .get();
             
-            if (!attendanceCheck.empty) {
+            if (!allAttendanceSnap.empty && currentUserData.role === 'manager') {
+                // للمدير: حذف جميع سجلات الحضور القديمة تلقائياً
+                const deleteBatch = db.batch();
+                allAttendanceSnap.forEach(doc => {
+                    deleteBatch.delete(doc.ref);
+                });
+                await deleteBatch.commit();
+            } else if (!allAttendanceSnap.empty) {
+                // للمستخدمين الآخرين: منع الحذف
                 showToast(t('cannotDeleteEmployeeWithAttendance'), 'error');
                 return;
             }
             
             // تأكيد الحذف
             const confirmMsg = currentLanguage === 'ar' 
-                ? `هل أنت متأكد من حذف الموظف "${employeeName}"؟`
-                : `Are you sure you want to delete employee "${employeeName}"?`;
+                ? `هل أنت متأكد من حذف الموظف "${finalEmployeeName}"؟`
+                : `Are you sure you want to delete employee "${finalEmployeeName}"?`;
             
             if (!confirm(confirmMsg)) return;
-            
-            // جلب بيانات الموظف لتحديث عداد المشروع
-            const empDoc = await db.collection('employees').doc(employeeId).get();
-            const empData = empDoc.data();
-            const projectId = empData?.projectId;
-            const employeeName = empData?.name || employeeId;
             
             // حذف الموظف
             await db.collection('employees').doc(employeeId).delete();
@@ -2677,7 +2732,7 @@
                     employeesCount: firebase.firestore.FieldValue.increment(-1)
                 });
             }
-            logActivity('delete', 'employee', employeeId, employeeName, currentLanguage === 'ar' ? 'حذف موظف' : 'Employee deleted');
+            logActivity('delete', 'employee', employeeId, finalEmployeeName, currentLanguage === 'ar' ? 'حذف موظف' : 'Employee deleted');
             
             showToast(t('deleted'), 'success');
             loadEmployees();
@@ -2785,6 +2840,15 @@
                     </div>
                 </div>
                 
+                ${(!employee || employee.type === 'daily') ? `
+                <div id="daily-wage-field">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">${t('dailyWage')} (${currentLanguage === 'ar' ? 'IQD' : 'IQD'})</label>
+                    <input type="number" id="employee-daily-wage" step="0.01" min="0" value="${employee?.dailyWage || ''}"
+                           placeholder="${currentLanguage === 'ar' ? 'أدخل الأجر اليومي' : 'Enter daily wage'}"
+                           class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none">
+                </div>
+                ` : ''}
+                
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">${t('notes')}</label>
                     <textarea id="employee-notes" rows="2"
@@ -2809,6 +2873,11 @@
         `;
         
         openModal(title, content, footer);
+        
+        // التأكد من إظهار/إخفاء حقل الأجر اليومي بشكل صحيح
+        setTimeout(() => {
+            toggleJobPositionField();
+        }, 100);
     }
     
     function updateEmployeeSchedule() {
@@ -2826,12 +2895,18 @@
         const typeSelect = document.getElementById('employee-type');
         const label = document.getElementById('job-position-label');
         const input = document.getElementById('employee-job');
+        const dailyWageField = document.getElementById('daily-wage-field');
         
         if (!typeSelect || !label || !input) return;
         
         const isMonthly = typeSelect.value === 'monthly';
         label.textContent = isMonthly ? t('position') : t('profession');
         input.placeholder = isMonthly ? t('positionPlaceholder') : t('professionPlaceholder');
+        
+        // إظهار/إخفاء حقل الأجر اليومي
+        if (dailyWageField) {
+            dailyWageField.style.display = isMonthly ? 'none' : 'block';
+        }
     }
     
     async function saveEmployee() {
@@ -2858,6 +2933,8 @@
         const phone = (form.querySelector('#employee-phone')?.value || '').trim();
         const jobTitle = (form.querySelector('#employee-job')?.value || '').trim();
         const note = (form.querySelector('#employee-notes')?.value || '').trim();
+        const dailyWageInput = form.querySelector('#employee-daily-wage');
+        const dailyWage = dailyWageInput ? parseFloat(dailyWageInput.value) || null : null;
         
         if (!name || !projectId) {
             showToast(t('required'), 'error');
@@ -2894,6 +2971,14 @@
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             };
             
+            // إضافة الأجر اليومي للموظفين اليوميين فقط
+            if (type === 'daily' && dailyWage !== null) {
+                employeeData.dailyWage = dailyWage;
+            } else if (type === 'daily') {
+                // إذا كان موظف يومي ولم يتم تحديد أجر، نتركه فارغاً
+                employeeData.dailyWage = null;
+            }
+            
             if (id) {
                 // تعديل
                 const status = form.querySelector('#employee-status')?.value || 'active';
@@ -2901,7 +2986,39 @@
                 
                 // التحقق من تغيير المشروع (نقل)
                 const oldDoc = await db.collection('employees').doc(id).get();
-                const oldProjectId = oldDoc.data()?.projectId;
+                const oldData = oldDoc.data();
+                const oldProjectId = oldData?.projectId;
+                const oldDailyWage = oldData?.dailyWage;
+                
+                // إدارة سجل الأجور: إذا تغير الأجر اليومي، نضيف سجل جديد
+                if (type === 'daily' && dailyWage !== null && dailyWage !== oldDailyWage) {
+                    const now = new Date();
+                    const currentMonth = now.getMonth() + 1; // 1-12
+                    const currentYear = now.getFullYear();
+                    
+                    const wageHistory = oldData?.wageHistory || [];
+                    // التحقق من وجود سجل لهذا الشهر
+                    const existingMonthIndex = wageHistory.findIndex(
+                        w => w.month === currentMonth && w.year === currentYear
+                    );
+                    
+                    if (existingMonthIndex >= 0) {
+                        // تحديث السجل الموجود
+                        wageHistory[existingMonthIndex].wage = dailyWage;
+                        wageHistory[existingMonthIndex].updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+                    } else {
+                        // إضافة سجل جديد
+                        wageHistory.push({
+                            month: currentMonth,
+                            year: currentYear,
+                            wage: dailyWage,
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                    }
+                    
+                    employeeData.wageHistory = wageHistory;
+                }
                 
                 await db.collection('employees').doc(id).update(employeeData);
                 
@@ -2926,6 +3043,23 @@
                 employeeData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
                 employeeData.createdBy = currentUser.uid;
                 employeeData.transferHistory = [];
+                
+                // إضافة سجل الأجر الأولي للموظفين اليوميين
+                if (type === 'daily' && dailyWage !== null) {
+                    const now = new Date();
+                    const currentMonth = now.getMonth() + 1; // 1-12
+                    const currentYear = now.getFullYear();
+                    
+                    employeeData.wageHistory = [{
+                        month: currentMonth,
+                        year: currentYear,
+                        wage: dailyWage,
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    }];
+                } else {
+                    employeeData.wageHistory = [];
+                }
                 
                 const empRef = await db.collection('employees').add(employeeData);
                 
@@ -2995,6 +3129,33 @@
                 <div>
                     <label class="text-sm text-gray-500">${employee.type === 'monthly' ? t('position') : t('profession')}</label>
                     <p class="font-medium">${employee.jobTitle}</p>
+                </div>
+                ` : ''}
+                
+                ${employee.type === 'daily' ? `
+                <div>
+                    <label class="text-sm text-gray-500">${t('currentDailyWage')}</label>
+                    <p class="font-medium">${employee.dailyWage ? employee.dailyWage.toFixed(2) + ' ' + (currentLanguage === 'ar' ? 'IQD' : 'IQD') : '-'}</p>
+                </div>
+                ` : ''}
+                
+                ${employee.type === 'daily' && employee.wageHistory?.length > 0 ? `
+                <div class="pt-4 border-t">
+                    <label class="text-sm text-gray-500 mb-2 block">${t('wageHistory')}</label>
+                    <div class="space-y-2 max-h-48 overflow-y-auto">
+                        ${employee.wageHistory.map(wh => {
+                            const monthNames = currentLanguage === 'ar' 
+                                ? ['', 'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر']
+                                : ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+                            const date = wh.createdAt?.toDate ? wh.createdAt.toDate() : (wh.updatedAt?.toDate ? wh.updatedAt.toDate() : null);
+                            return `
+                                <div class="text-sm bg-gray-50 p-2 rounded">
+                                    ${monthNames[wh.month]} ${wh.year}: ${wh.wage.toFixed(2)} ${currentLanguage === 'ar' ? 'IQD' : 'IQD'}
+                                    ${date ? ` (${formatDate(date)})` : ''}
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
                 </div>
                 ` : ''}
                 
@@ -3128,6 +3289,27 @@
                 }),
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             });
+            
+            // تحديث سجلات الحضور القديمة (نقلها إلى المشروع الجديد)
+            try {
+                const oldAttendanceSnap = await db.collection('attendance')
+                    .where('employeeId', '==', employeeId)
+                    .where('projectId', '==', fromProjectId)
+                    .get();
+                
+                if (!oldAttendanceSnap.empty) {
+                    const updateBatch = db.batch();
+                    oldAttendanceSnap.forEach(doc => {
+                        updateBatch.update(doc.ref, {
+                            projectId: toProjectId
+                        });
+                    });
+                    await updateBatch.commit();
+                }
+            } catch (attError) {
+                console.error('Error updating old attendance records:', attError);
+                // لا نوقف العملية إذا فشل تحديث سجلات الحضور
+            }
             
             // تحديث عدادات المشاريع
             await db.collection('projects').doc(fromProjectId).update({
@@ -5573,7 +5755,7 @@
         const dir = isRtl ? 'rtl' : 'ltr';
         const lang = document.documentElement.lang || 'ar';
         const title = t('projectReport') + ' / ' + t('employeeReport');
-        const prefix = '<!DOCTYPE html><html dir="' + dir + '" lang="' + lang + '"><head><meta charset="utf-8"><title>' + title + '</title><script src="https://cdn.tailwindcss.com"><\/script><style>@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}<\/style></head><body class="p-6 bg-gray-100"><div class="max-w-6xl mx-auto bg-white rounded-xl shadow p-6">';
+        const prefix = '<!DOCTYPE html><html dir="' + dir + '" lang="' + lang + '"><head><meta charset="utf-8"><title>' + title + '</title><script src="https://cdn.tailwindcss.com"><\/script><style>@page{size:A4 landscape;margin:10mm;}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}table{font-size:0.7rem!important;}th,td{padding:3px 4px!important;}}</style></head><body class="p-4 bg-gray-100"><div class="max-w-full mx-auto bg-white rounded-xl shadow p-4">';
         const suffix = '</div><script>window.onload=function(){setTimeout(function(){window.print();},600);};<\/script></body></html>';
         w.document.write(prefix + content + suffix);
         w.document.close();
@@ -5639,6 +5821,7 @@
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">${t('projects')}</label>
                                 <select id="report-project" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500">
+                                    ${currentUserData.role === 'manager' ? `<option value="all">${t('all')}</option>` : ''}
                                     ${projects.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
                                 </select>
                             </div>
@@ -5648,6 +5831,7 @@
                                     <option value="all">${t('all')}</option>
                                     <option value="monthly">${t('monthly')}</option>
                                     <option value="daily">${t('daily')}</option>
+                                    <option value="vehicles">${t('vehicles')}</option>
                                 </select>
                             </div>
                             <div class="grid grid-cols-2 gap-4">
@@ -5675,8 +5859,8 @@
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">${t('employees')}</label>
                                 <div class="report-employee-combobox">
-                                    <input type="hidden" id="report-employee" value="${employees.length ? employees[0].id : ''}">
-                                    <input type="text" id="report-employee-search" autocomplete="off" placeholder="${t('search')} ${t('employeeName')} / ${t('employeeCode')}..." class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500" value="${employees.length ? (employees[0].name + ' (' + (employees[0].code || '') + ')') : ''}">
+                                    <input type="hidden" id="report-employee" value="">
+                                    <input type="text" id="report-employee-search" autocomplete="off" placeholder="${t('search')} ${t('employeeName')} / ${t('employeeCode')}..." class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500" value="">
                                     <div id="report-employee-dropdown" class="report-employee-dropdown hidden"></div>
                                 </div>
                             </div>
@@ -5813,34 +5997,57 @@
         resultsContainer.innerHTML = `<div class="text-center py-8"><div class="loader mx-auto"></div></div>`;
         
         try {
-            const project = window.projectsListData?.find(p => p.id === projectId);
+            const showAllProjects = projectId === 'all';
+            const projects = showAllProjects ? (window.projectsListData || []) : [window.projectsListData?.find(p => p.id === projectId)].filter(Boolean);
             
-            // جلب الموظفين مع فلترة النوع
-            const empSnap = await db.collection('employees').where('projectId', '==', projectId).get();
-            let employees = [];
-            empSnap.forEach(doc => employees.push({ id: doc.id, ...doc.data() }));
-            if (employeeTypeFilter !== 'all') {
+            if (projects.length === 0) {
+                resultsContainer.innerHTML = `<p class="text-red-500 text-center py-8">${currentLanguage === 'ar' ? 'لا توجد مشاريع' : 'No projects found'}</p>`;
+                return;
+            }
+            
+            // جلب كل البيانات لجميع المشاريع
+            let allEmployees = [];
+            let allVehicles = [];
+            let allAttendance = {};
+            let allVehicleAttendance = {};
+            
+            for (const project of projects) {
+                // جلب الموظفين
+                const empSnap = await db.collection('employees').where('projectId', '==', project.id).get();
+                empSnap.forEach(doc => allEmployees.push({ id: doc.id, ...doc.data() }));
+                
+                // جلب الآليات
+                const vehSnap = await db.collection('vehicles').where('projectId', '==', project.id).get();
+                vehSnap.forEach(doc => allVehicles.push({ id: doc.id, ...doc.data() }));
+                
+                // جلب الحضور للموظفين
+                const attSnap = await db.collection('attendance').where('projectId', '==', project.id).get();
+                attSnap.forEach(doc => {
+                    const data = doc.data();
+                    if (data.date >= fromDate && data.date <= toDate) {
+                        if (!allAttendance[data.employeeId]) allAttendance[data.employeeId] = [];
+                        allAttendance[data.employeeId].push(data);
+                    }
+                });
+                
+                // جلب حضور الآليات
+                const vehAttSnap = await db.collection('vehicleAttendance').where('projectId', '==', project.id).get();
+                vehAttSnap.forEach(doc => {
+                    const data = doc.data();
+                    if (data.date >= fromDate && data.date <= toDate) {
+                        if (!allVehicleAttendance[data.vehicleId]) allVehicleAttendance[data.vehicleId] = [];
+                        allVehicleAttendance[data.vehicleId].push(data);
+                    }
+                });
+            }
+            
+            // فلترة الموظفين حسب النوع
+            let employees = allEmployees;
+            if (employeeTypeFilter !== 'all' && employeeTypeFilter !== 'vehicles') {
                 employees = employees.filter(e => e.type === employeeTypeFilter);
             }
             
-            // جلب الآليات
-            const vehSnap = await db.collection('vehicles').where('projectId', '==', projectId).get();
-            const vehicles = [];
-            vehSnap.forEach(doc => vehicles.push({ id: doc.id, ...doc.data() }));
-            
-            // جلب الحضور
-            const attSnap = await db.collection('attendance')
-                .where('projectId', '==', projectId)
-                .get();
-            
-            const attendance = {};
-            attSnap.forEach(doc => {
-                const data = doc.data();
-                if (data.date >= fromDate && data.date <= toDate) {
-                    if (!attendance[data.employeeId]) attendance[data.employeeId] = [];
-                    attendance[data.employeeId].push(data);
-                }
-            });
+            const vehicles = allVehicles;
             
             // عدد أيام الفترة (من - إلى شاملاً)
             const fromParts = fromDate.split('-').map(Number);
@@ -5850,6 +6057,9 @@
             const daysInPeriod = Math.max(1, Math.round((toD - fromD) / (24 * 60 * 60 * 1000)) + 1);
             
             // الحضور المؤجور = حضور فعلي (يوم كامل + جزئي معادل). الحضور غير المؤجور = أيام الفترة - المؤجور (بحيث المؤجور + غير المؤجور = أيام الفترة)
+            const attendance = allAttendance;
+            const vehicleAttendance = allVehicleAttendance;
+            
             const employeeStats = employees.map(emp => {
                 const empAtt = attendance[emp.id] || [];
                 const fullDay = empAtt.filter(a => a.status === 'full_day').length;
@@ -5918,19 +6128,89 @@
             
             const typeLabel = employeeTypeFilter === 'all' ? '' : ` (${t(employeeTypeFilter)})`;
             
+            // حساب إحصائيات الآليات
+            const vehicleStats = vehicles.map(veh => {
+                const vehAtt = vehicleAttendance[veh.id] || [];
+                const worked = vehAtt.filter(a => a.status === 'worked').length;
+                const workedPartial = vehAtt.filter(a => a.status === 'workedPartial').length;
+                const broken = vehAtt.filter(a => a.status === 'broken').length;
+                const maintenance = vehAtt.filter(a => a.status === 'maintenance').length;
+                const idle = vehAtt.filter(a => a.status === 'idle').length;
+                const totalDays = vehAtt.length;
+                const approvedCount = vehAtt.filter(a => a.approved === true).length;
+                const unapprovedCount = vehAtt.length - approvedCount;
+                
+                return {
+                    ...veh,
+                    worked,
+                    workedPartial,
+                    broken,
+                    maintenance,
+                    idle,
+                    totalDays,
+                    approvedCount,
+                    unapprovedCount
+                };
+            });
+            
+            const vehicleTotals = vehicleStats.reduce((acc, v) => ({
+                worked: acc.worked + v.worked,
+                workedPartial: acc.workedPartial + v.workedPartial,
+                broken: acc.broken + v.broken,
+                maintenance: acc.maintenance + v.maintenance,
+                idle: acc.idle + v.idle,
+                approvedRecords: acc.approvedRecords + v.approvedCount,
+                unapprovedRecords: acc.unapprovedRecords + v.unapprovedCount
+            }), { worked: 0, workedPartial: 0, broken: 0, maintenance: 0, idle: 0, approvedRecords: 0, unapprovedRecords: 0 });
+            
+            const showVehiclesOnly = employeeTypeFilter === 'vehicles';
+            
+            const project = showAllProjects ? null : projects[0];
+            const projectTitle = showAllProjects ? (currentLanguage === 'ar' ? 'جميع المشاريع' : 'All Projects') : project?.name;
+            const projectCode = showAllProjects ? '' : `${project?.code} | `;
+            
             resultsContainer.innerHTML = `
                 <div class="card p-6">
                     <div class="flex items-center justify-between mb-6 flex-wrap gap-4">
                         <div>
-                            <h3 class="font-bold text-xl">${project?.name}</h3>
-                            <p class="text-gray-500">${project?.code} | ${fromDate} - ${toDate}${typeLabel}</p>
+                            <h3 class="font-bold text-xl">${projectTitle}</h3>
+                            <p class="text-gray-500">${projectCode}${fromDate} - ${toDate}${typeLabel}</p>
                         </div>
                         <button onclick="printReportInNewTab()" class="no-print px-4 py-2 border rounded-lg hover:bg-gray-100">
                             🖨️ ${t('print')}
                         </button>
                     </div>
                     
-                    <div class="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
+                    ${showVehiclesOnly ? `
+                    <div class="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6 no-print-stats">
+                        <div class="bg-orange-50 p-4 rounded-lg text-center">
+                            <p class="text-2xl font-bold text-orange-600">${vehicles.length}</p>
+                            <p class="text-sm text-gray-500">${t('vehicles')}</p>
+                        </div>
+                        <div class="bg-gray-100 p-4 rounded-lg text-center">
+                            <p class="text-2xl font-bold text-gray-700">${daysInPeriod}</p>
+                            <p class="text-sm text-gray-500">${t('daysInPeriod')}</p>
+                        </div>
+                        <div class="bg-green-50 p-4 rounded-lg text-center">
+                            <p class="text-2xl font-bold text-green-600">${vehicleTotals.worked}</p>
+                            <p class="text-sm text-gray-500">🟢 ${t('worked')}</p>
+                        </div>
+                        <div class="bg-yellow-50 p-4 rounded-lg text-center">
+                            <p class="text-2xl font-bold text-yellow-700">${vehicleTotals.workedPartial}</p>
+                            <p class="text-sm text-gray-500">🟡 ${t('workedPartial')}</p>
+                        </div>
+                        <div class="bg-emerald-50 p-4 rounded-lg text-center">
+                            <p class="text-2xl font-bold text-emerald-600">${vehicleTotals.approvedRecords}</p>
+                            <p class="text-sm text-gray-500">${t('approvedRecords')}</p>
+                        </div>
+                        <div class="bg-amber-50 p-4 rounded-lg text-center">
+                            <p class="text-2xl font-bold text-amber-600">${vehicleTotals.unapprovedRecords}</p>
+                            <p class="text-sm text-gray-500">${t('unapprovedRecords')}</p>
+                        </div>
+                    </div>
+                    <p class="text-sm text-gray-600 mb-4 no-print-stats">${t('reportApprovalNote')} ✓ ${t('approvedRecords')}: ${vehicleTotals.approvedRecords} | ${t('unapprovedRecords')}: ${vehicleTotals.unapprovedRecords}</p>
+                    ` : `
+                    <div class="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6 no-print-stats">
                         <div class="bg-blue-50 p-4 rounded-lg text-center">
                             <p class="text-2xl font-bold text-blue-600">${employees.length}</p>
                             <p class="text-sm text-gray-500">${t('employees')}${typeLabel}</p>
@@ -5968,11 +6248,9 @@
                             <p class="text-sm text-gray-500">${t('unapprovedRecords')}</p>
                         </div>
                     </div>
-                    <p class="text-sm text-gray-600 mb-4">${t('excusedAttendance')} + ${t('unexcusedAttendance')} = ${t('daysInPeriod')} (${daysInPeriod})</p>
-                    <p class="text-sm text-gray-600 mb-4">${t('reportApprovalNote')} ✓ ${t('approvedRecords')}: ${totals.approvedRecords} | ${t('unapprovedRecords')}: ${totals.unapprovedRecords}</p>
-                    
-                    <p class="text-sm text-gray-600 mb-4">${t('actualAttendanceNote')}</p>
-                    
+                    <p class="text-sm text-gray-600 mb-4 no-print-stats">${t('excusedAttendance')} + ${t('unexcusedAttendance')} = ${t('daysInPeriod')} (${daysInPeriod})</p>
+                    <p class="text-sm text-gray-600 mb-4 no-print-stats">${t('reportApprovalNote')} ✓ ${t('approvedRecords')}: ${totals.approvedRecords} | ${t('unapprovedRecords')}: ${totals.unapprovedRecords}</p>
+                    <p class="text-sm text-gray-600 mb-4 no-print-stats">${t('actualAttendanceNote')}</p>
                     <h4 class="font-bold mb-4">${t('employees')} (${employees.length})</h4>
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm">
@@ -6028,6 +6306,47 @@
                             </tbody>
                         </table>
                     </div>
+                    `}
+                    
+                    <h4 class="font-bold mb-4 mt-6">${t('vehicles')} (${vehicles.length})</h4>
+                    ${vehicles.length > 0 ? `
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-2 py-2 text-right">${t('vehicleCode')}</th>
+                                    <th class="px-2 py-2 text-right">${t('vehicleName')}</th>
+                                    <th class="px-2 py-2 text-right">${t('vehicleType')}</th>
+                                    <th class="px-2 py-2 text-center">🟢 ${t('worked')}</th>
+                                    <th class="px-2 py-2 text-center">🟡 ${t('workedPartial')}</th>
+                                    <th class="px-2 py-2 text-center">🔴 ${t('broken')}</th>
+                                    <th class="px-2 py-2 text-center">🟠 ${t('maintenance')}</th>
+                                    <th class="px-2 py-2 text-center">⚪ ${t('idle')}</th>
+                                    <th class="px-2 py-2 text-center">${t('daysInPeriod')}</th>
+                                    <th class="px-2 py-2 text-center text-emerald-700">✓ ${t('approvedRecords')}</th>
+                                    <th class="px-2 py-2 text-center text-amber-700">○ ${t('unapprovedRecords')}</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y">
+                                ${vehicleStats.map(veh => `
+                                    <tr class="hover:bg-gray-50">
+                                        <td class="px-2 py-2 font-mono">${veh.code}</td>
+                                        <td class="px-2 py-2 font-medium">${veh.name}</td>
+                                        <td class="px-2 py-2">${t(veh.type)}</td>
+                                        <td class="px-2 py-2 text-center text-green-600">${veh.worked}</td>
+                                        <td class="px-2 py-2 text-center text-yellow-600">${veh.workedPartial}</td>
+                                        <td class="px-2 py-2 text-center text-red-600">${veh.broken}</td>
+                                        <td class="px-2 py-2 text-center text-orange-600">${veh.maintenance}</td>
+                                        <td class="px-2 py-2 text-center text-gray-600">${veh.idle}</td>
+                                        <td class="px-2 py-2 text-center font-medium">${veh.totalDays}</td>
+                                        <td class="px-2 py-2 text-center text-emerald-600">${veh.approvedCount}</td>
+                                        <td class="px-2 py-2 text-center text-amber-600">${veh.unapprovedCount}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                    ` : `<p class="text-gray-500 text-center py-4">${currentLanguage === 'ar' ? 'لا توجد آليات في هذا المشروع' : 'No vehicles in this project'}</p>`}
                 </div>
             `;
             
@@ -6054,9 +6373,10 @@
             const projDoc = await db.collection('projects').doc(employee.projectId).get();
             const project = projDoc.exists ? projDoc.data() : null;
             
-            // جلب الحضور
+            // جلب الحضور (فقط من المشروع الحالي للموظف)
             const attSnap = await db.collection('attendance')
                 .where('employeeId', '==', employeeId)
+                .where('projectId', '==', employee.projectId)
                 .get();
             
             const attendance = [];
@@ -6070,6 +6390,33 @@
             
             // ترتيب حسب التاريخ
             attendance.sort((a, b) => a.date.localeCompare(b.date));
+            
+            // حساب القيم الرقمية للحضور (لجميع السجلات بغض النظر عن الاعتماد)
+            // المؤجور = 1، غير المؤجور = 0
+            let totalNumericDays = 0;
+            let totalApprovedNumericDays = 0;
+            attendance.forEach(att => {
+                let dayValue = 0;
+                if (att.status === 'full_day') {
+                    dayValue = 1; // حضور كامل = 1
+                } else if (att.status === 'partial') {
+                    dayValue = getPartialEquivalentDays(att); // حضور جزئي = حسب الساعات
+                } else if (att.status === 'excusedAbsent' || 
+                          att.status === 'annualLeave' || 
+                          att.status === 'sickLeave' || 
+                          att.status === 'emergencyLeave' || 
+                          att.status === 'unpaidLeave' || 
+                          att.status === 'officialHoliday' || 
+                          att.status === 'onMission') {
+                    dayValue = 1; // جميع الإجازات (مؤجورة) = 1
+                } else if (att.status === 'absent') {
+                    dayValue = 0; // الغياب (غير مؤجور) = 0
+                }
+                totalNumericDays += dayValue;
+                if (att.approved === true) {
+                    totalApprovedNumericDays += dayValue;
+                }
+            });
             
             // حساب الإحصائيات
             const stats = {
@@ -6086,6 +6433,32 @@
             const totalDays = attendance.length;
             const rate = totalDays > 0 ? Math.round((totalWork / totalDays) * 100) : 0;
             
+            // حساب الراتب الإجمالي للموظفين اليوميين
+            let totalSalary = null;
+            let dailyWage = null;
+            if (employee.type === 'daily') {
+                // تحديد الأجر اليومي بناءً على الفترة المحددة
+                const fromDateObj = new Date(fromDate);
+                const toDateObj = new Date(toDate);
+                const reportMonth = fromDateObj.getMonth() + 1;
+                const reportYear = fromDateObj.getFullYear();
+                
+                // البحث عن الأجر في wageHistory للشهر المحدد
+                const wageHistory = employee.wageHistory || [];
+                const monthWage = wageHistory.find(w => w.month === reportMonth && w.year === reportYear);
+                
+                if (monthWage) {
+                    dailyWage = monthWage.wage;
+                } else {
+                    // استخدام الأجر الحالي إذا لم يوجد سجل للشهر
+                    dailyWage = employee.dailyWage || 0;
+                }
+                
+                if (dailyWage > 0) {
+                    totalSalary = dailyWage * totalApprovedNumericDays;
+                }
+            }
+            
             resultsContainer.innerHTML = `
                 <div class="card p-6">
                     <div class="flex items-center justify-between mb-6">
@@ -6097,6 +6470,24 @@
                             🖨️ ${t('print')}
                         </button>
                     </div>
+                    
+                    ${employee.type === 'daily' && totalSalary !== null ? `
+                    <div class="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-gray-600 mb-1">${t('salaryCalculation')}</p>
+                                <p class="text-sm text-gray-700">
+                                    ${t('currentDailyWage')}: <span class="font-bold">${dailyWage.toFixed(2)} ${currentLanguage === 'ar' ? 'IQD' : 'IQD'}</span>
+                                    × ${totalApprovedNumericDays.toFixed(2)} ${currentLanguage === 'ar' ? 'يوم معتمد' : 'approved days'}
+                                </p>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-sm text-gray-600 mb-1">${t('totalSalary')}</p>
+                                <p class="text-2xl font-bold text-blue-600">${totalSalary.toFixed(2)} ${currentLanguage === 'ar' ? 'IQD' : 'IQD'}</p>
+                            </div>
+                        </div>
+                    </div>
+                    ` : ''}
                     
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                         <div class="bg-green-50 p-4 rounded-lg text-center">
@@ -6131,12 +6522,33 @@
                                 <tr>
                                     <th class="px-4 py-2 text-right">${t('date')}</th>
                                     <th class="px-4 py-2 text-right">${t('status')}</th>
+                                    <th class="px-4 py-2 text-center">${currentLanguage === 'ar' ? 'الحضور (رقمي)' : 'Attendance (Numeric)'}</th>
+                                    <th class="px-4 py-2 text-center">${t('approved')}</th>
                                     <th class="px-4 py-2 text-right">${t('notes')}</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y">
                                 ${attendance.map(att => {
                                     const statusInfo = attendanceStatuses.employee.find(s => s.key === att.status);
+                                    // حساب القيمة الرقمية (بغض النظر عن الاعتماد)
+                                    // المؤجور = 1، غير المؤجور = 0
+                                    let numericValue = 0;
+                                    if (att.status === 'full_day') {
+                                        numericValue = 1; // حضور كامل = 1
+                                    } else if (att.status === 'partial') {
+                                        numericValue = getPartialEquivalentDays(att); // حضور جزئي = حسب الساعات
+                                    } else if (att.status === 'excusedAbsent' || 
+                                              att.status === 'annualLeave' || 
+                                              att.status === 'sickLeave' || 
+                                              att.status === 'emergencyLeave' || 
+                                              att.status === 'unpaidLeave' || 
+                                              att.status === 'officialHoliday' || 
+                                              att.status === 'onMission') {
+                                        numericValue = 1; // جميع الإجازات (مؤجورة) = 1
+                                    } else if (att.status === 'absent') {
+                                        numericValue = 0; // الغياب (غير مؤجور) = 0
+                                    }
+                                    
                                     return `
                                         <tr class="hover:bg-gray-50">
                                             <td class="px-4 py-2">${formatDate(new Date(att.date))}</td>
@@ -6145,10 +6557,25 @@
                                                     ${statusInfo?.icon || ''} ${t(att.status)}
                                                 </span>
                                             </td>
+                                            <td class="px-4 py-2 text-center font-medium">${numericValue.toFixed(2)}</td>
+                                            <td class="px-4 py-2 text-center">
+                                                ${att.approved === true ? 
+                                                    `<span class="text-green-600 font-medium">✓ ${t('approved')}</span>` : 
+                                                    `<span class="text-gray-400">○ ${t('notApproved')}</span>`
+                                                }
+                                            </td>
                                             <td class="px-4 py-2 text-gray-500">${att.note || '-'}</td>
                                         </tr>
                                     `;
                                 }).join('')}
+                                <tr class="bg-gray-100 font-bold">
+                                    <td class="px-4 py-2" colspan="2">${currentLanguage === 'ar' ? 'الإجمالي' : 'Total'}</td>
+                                    <td class="px-4 py-2 text-center text-primary-600">${totalNumericDays.toFixed(2)}</td>
+                                    <td class="px-4 py-2 text-center">
+                                        ${attendance.filter(a => a.approved === true).length} ${t('approved')} / ${attendance.length} ${currentLanguage === 'ar' ? 'إجمالي' : 'total'}
+                                    </td>
+                                    <td class="px-4 py-2"></td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>
@@ -6213,6 +6640,321 @@
         } catch (error) {
             console.error('Error loading activity log:', error);
             container.innerHTML = `<p class="text-red-500 text-center py-8">${t('error')}</p>`;
+        }
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════════
+    // إدارة الأجور الشهرية (للمدير فقط)
+    // ═══════════════════════════════════════════════════════════════════════
+    
+    async function loadMonthlyWageManagement() {
+        const container = document.getElementById('page-monthlyWageManagement');
+        container.innerHTML = `<div class="text-center py-8"><div class="loader mx-auto"></div></div>`;
+        
+        try {
+            // جلب المشاريع المتاحة حسب الدور
+            let availableProjects = [];
+            if (currentUserData.role === 'supervisor' && currentUserData.assignedProjects && currentUserData.assignedProjects.length > 0) {
+                const projectsSnap = await db.collection('projects').where(firebase.firestore.FieldPath.documentId(), 'in', currentUserData.assignedProjects).get();
+                projectsSnap.forEach(doc => {
+                    const data = doc.data();
+                    if (data.status !== 'hidden') {
+                        availableProjects.push({ id: doc.id, ...data });
+                    }
+                });
+            } else {
+                const projectsSnap = await db.collection('projects').where('status', '!=', 'hidden').get();
+                projectsSnap.forEach(doc => {
+                    availableProjects.push({ id: doc.id, ...doc.data() });
+                });
+            }
+            
+            // جلب جميع الموظفين اليوميين مع فلترة حسب المشاريع المتاحة
+            let employeesSnap;
+            if (currentUserData.role === 'supervisor' && currentUserData.assignedProjects && currentUserData.assignedProjects.length > 0) {
+                employeesSnap = await db.collection('employees')
+                    .where('type', '==', 'daily')
+                    .where('status', '==', 'active')
+                    .where('projectId', 'in', currentUserData.assignedProjects)
+                    .get();
+            } else {
+                employeesSnap = await db.collection('employees')
+                    .where('type', '==', 'daily')
+                    .where('status', '==', 'active')
+                    .get();
+            }
+            
+            const employees = [];
+            employeesSnap.forEach(doc => {
+                const data = doc.data();
+                // للمشرف: التأكد من أن الموظف ينتمي للمشاريع المسندة فقط
+                if (currentUserData.role === 'supervisor' && currentUserData.assignedProjects && currentUserData.assignedProjects.length > 0) {
+                    if (currentUserData.assignedProjects.includes(data.projectId)) {
+                        employees.push({ id: doc.id, ...data });
+                    }
+                } else {
+                    employees.push({ id: doc.id, ...data });
+                }
+            });
+            
+            // ترتيب الموظفين حسب المشروع ثم الاسم
+            employees.sort((a, b) => {
+                const projectA = window.projectsListData?.find(p => p.id === a.projectId)?.name || '';
+                const projectB = window.projectsListData?.find(p => p.id === b.projectId)?.name || '';
+                if (projectA !== projectB) return projectA.localeCompare(projectB);
+                return a.name.localeCompare(b.name);
+            });
+            
+            const now = new Date();
+            const currentMonth = now.getMonth() + 1;
+            const currentYear = now.getFullYear();
+            
+            const monthNames = currentLanguage === 'ar' 
+                ? ['', 'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر']
+                : ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+            
+            container.innerHTML = `
+                <div class="card p-6">
+                    <h2 class="text-xl font-bold mb-6">${t('monthlyWageManagement')}</h2>
+                    
+                    <div class="mb-6 flex items-center gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">${t('projects')}</label>
+                            <select id="wage-project-filter" onchange="loadWageManagementData()" class="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none">
+                                <option value="all">${t('all')}</option>
+                                ${availableProjects.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">${t('month')}</label>
+                            <select id="wage-month" class="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none">
+                                ${Array.from({ length: 12 }, (_, i) => i + 1).map(m => 
+                                    `<option value="${m}" ${m === currentMonth ? 'selected' : ''}>${monthNames[m]}</option>`
+                                ).join('')}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">${t('year')}</label>
+                            <input type="number" id="wage-year" value="${currentYear}" min="2020" max="2100"
+                                   class="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none">
+                        </div>
+                        <div class="flex items-end">
+                            <button onclick="loadWageManagementData()" class="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">
+                                ${t('search')}
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div id="wage-management-table" class="overflow-x-auto">
+                        ${generateWageManagementTable(employees, currentMonth, currentYear)}
+                    </div>
+                </div>
+            `;
+        } catch (error) {
+            console.error('Error loading monthly wage management:', error);
+            container.innerHTML = `<p class="text-red-500 text-center py-8">${t('error')}</p>`;
+        }
+    }
+    
+    function generateWageManagementTable(employees, month, year) {
+        if (employees.length === 0) {
+            return `<p class="text-gray-500 text-center py-8">${currentLanguage === 'ar' ? 'لا توجد موظفين يوميين' : 'No daily employees'}</p>`;
+        }
+        
+        const monthNames = currentLanguage === 'ar' 
+            ? ['', 'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر']
+            : ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        
+        return `
+            <table class="w-full text-sm border-collapse">
+                <thead>
+                    <tr class="bg-gray-50 border-b">
+                        <th class="px-4 py-3 text-right font-medium">${t('employeeName')}</th>
+                        <th class="px-4 py-3 text-right font-medium">${t('projects')}</th>
+                        <th class="px-4 py-3 text-center font-medium">${t('currentDailyWage')}</th>
+                        <th class="px-4 py-3 text-center font-medium">${t('wageAmount')} (${currentLanguage === 'ar' ? 'IQD' : 'IQD'})</th>
+                        <th class="px-4 py-3 text-center font-medium">${t('actions')}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${employees.map(emp => {
+                        const project = window.projectsListData?.find(p => p.id === emp.projectId);
+                        const currentWage = emp.dailyWage || 0;
+                        const wageHistory = emp.wageHistory || [];
+                        const monthWage = wageHistory.find(w => w.month === month && w.year === year);
+                        const displayWage = monthWage ? monthWage.wage : currentWage;
+                        
+                        return `
+                            <tr class="border-b hover:bg-gray-50" data-employee-id="${emp.id}">
+                                <td class="px-4 py-3 font-medium">${emp.name}</td>
+                                <td class="px-4 py-3">${project?.name || '-'}</td>
+                                <td class="px-4 py-3 text-center">${currentWage.toFixed(2)} ${currentLanguage === 'ar' ? 'IQD' : 'IQD'}</td>
+                                <td class="px-4 py-3 text-center">
+                                    <input type="number" 
+                                           id="wage-input-${emp.id}" 
+                                           step="0.01" 
+                                           min="0" 
+                                           value="${displayWage.toFixed(2)}"
+                                           class="w-32 px-3 py-1 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-center">
+                                </td>
+                                <td class="px-4 py-3 text-center">
+                                    <button onclick="saveMonthlyWage('${emp.id}', ${month}, ${year})" 
+                                            class="px-3 py-1 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm">
+                                        ${t('save')}
+                                    </button>
+                                </td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>
+        `;
+    }
+    
+    async function loadWageManagementData() {
+        const month = parseInt(document.getElementById('wage-month').value);
+        const year = parseInt(document.getElementById('wage-year').value);
+        const projectFilter = document.getElementById('wage-project-filter').value;
+        
+        try {
+            let employeesSnap;
+            
+            // تحديد المشاريع المتاحة حسب الدور
+            let availableProjectIds = [];
+            if (currentUserData.role === 'supervisor' && currentUserData.assignedProjects && currentUserData.assignedProjects.length > 0) {
+                availableProjectIds = currentUserData.assignedProjects;
+            } else {
+                const projectsSnap = await db.collection('projects').where('status', '!=', 'hidden').get();
+                projectsSnap.forEach(doc => {
+                    availableProjectIds.push(doc.id);
+                });
+            }
+            
+            // تطبيق فلتر المشروع
+            let projectIdsToQuery = availableProjectIds;
+            if (projectFilter !== 'all') {
+                if (availableProjectIds.includes(projectFilter)) {
+                    projectIdsToQuery = [projectFilter];
+                } else {
+                    projectIdsToQuery = [];
+                }
+            }
+            
+            if (projectIdsToQuery.length === 0) {
+                document.getElementById('wage-management-table').innerHTML = `<p class="text-gray-500 text-center py-8">${currentLanguage === 'ar' ? 'لا توجد موظفين يوميين' : 'No daily employees'}</p>`;
+                return;
+            }
+            
+            // جلب الموظفين مع فلترة حسب المشاريع المتاحة
+            // معالجة حد Firestore (10 قيم كحد أقصى في 'in')
+            if (currentUserData.role === 'supervisor' && currentUserData.assignedProjects && currentUserData.assignedProjects.length > 0) {
+                // إذا كان عدد المشاريع > 10، جلب كل الموظفين ثم فلترة في الذاكرة
+                if (projectIdsToQuery.length > 10) {
+                    employeesSnap = await db.collection('employees')
+                        .where('type', '==', 'daily')
+                        .where('status', '==', 'active')
+                        .get();
+                } else {
+                    // استخدام الاستعلام المباشر إذا كان <= 10
+                    employeesSnap = await db.collection('employees')
+                        .where('type', '==', 'daily')
+                        .where('status', '==', 'active')
+                        .where('projectId', 'in', projectIdsToQuery)
+                        .get();
+                }
+            } else {
+                employeesSnap = await db.collection('employees')
+                    .where('type', '==', 'daily')
+                    .where('status', '==', 'active')
+                    .get();
+            }
+            
+            const employees = [];
+            employeesSnap.forEach(doc => {
+                const data = doc.data();
+                // تطبيق فلتر المشروع على البيانات المحملة
+                if (projectFilter === 'all' || data.projectId === projectFilter) {
+                    if (availableProjectIds.includes(data.projectId)) {
+                        employees.push({ id: doc.id, ...data });
+                    }
+                }
+            });
+            
+            employees.sort((a, b) => {
+                const projectA = window.projectsListData?.find(p => p.id === a.projectId)?.name || '';
+                const projectB = window.projectsListData?.find(p => p.id === b.projectId)?.name || '';
+                if (projectA !== projectB) return projectA.localeCompare(projectB);
+                return a.name.localeCompare(b.name);
+            });
+            
+            document.getElementById('wage-management-table').innerHTML = generateWageManagementTable(employees, month, year);
+        } catch (error) {
+            console.error('Error loading wage management data:', error);
+            showToast(t('error'), 'error');
+        }
+    }
+    
+    async function saveMonthlyWage(employeeId, month, year) {
+        const wageInput = document.getElementById(`wage-input-${employeeId}`);
+        if (!wageInput) return;
+        
+        const wage = parseFloat(wageInput.value);
+        if (isNaN(wage) || wage < 0) {
+            showToast(currentLanguage === 'ar' ? 'يرجى إدخال قيمة صحيحة' : 'Please enter a valid value', 'error');
+            return;
+        }
+        
+        try {
+            const empDoc = await db.collection('employees').doc(employeeId).get();
+            if (!empDoc.exists) {
+                showToast(t('error'), 'error');
+                return;
+            }
+            
+            const empData = empDoc.data();
+            const wageHistory = empData.wageHistory || [];
+            
+            // البحث عن سجل موجود لهذا الشهر
+            const existingIndex = wageHistory.findIndex(w => w.month === month && w.year === year);
+            
+            if (existingIndex >= 0) {
+                // تحديث السجل الموجود
+                wageHistory[existingIndex].wage = wage;
+                wageHistory[existingIndex].updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+            } else {
+                // إضافة سجل جديد
+                wageHistory.push({
+                    month,
+                    year,
+                    wage,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+            }
+            
+            // تحديث الأجر اليومي الحالي إذا كان الشهر الحالي
+            const now = new Date();
+            const currentMonth = now.getMonth() + 1;
+            const currentYear = now.getFullYear();
+            
+            const updateData = {
+                wageHistory,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+            
+            if (month === currentMonth && year === currentYear) {
+                updateData.dailyWage = wage;
+            }
+            
+            await db.collection('employees').doc(employeeId).update(updateData);
+            
+            showToast(t('saved'), 'success');
+            
+            // تحديث الجدول
+            loadWageManagementData();
+        } catch (error) {
+            console.error('Error saving monthly wage:', error);
+            showToast(t('error'), 'error');
         }
     }
     
