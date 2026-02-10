@@ -832,6 +832,7 @@
             sickLeave: "إجازة مرضية",
             emergencyLeave: "إجازة طارئة",
             unpaidLeave: "إجازة بدون راتب",
+            periodicLeave: "إجازة دورية",
             officialHoliday: "عطلة رسمية",
             onMission: "في مهمة",
             lateArrival: "تأخر في الحضور",
@@ -1155,6 +1156,7 @@
             sickLeave: "Sick Leave",
             emergencyLeave: "Emergency Leave",
             unpaidLeave: "Unpaid Leave",
+            periodicLeave: "Periodic Leave",
             officialHoliday: "Official Holiday",
             onMission: "On Mission",
             lateArrival: "Late Arrival",
@@ -4361,6 +4363,7 @@
             { key: 'sickLeave', icon: '🟣', color: 'bg-purple-500' },
             { key: 'emergencyLeave', icon: '🩷', color: 'bg-pink-500' },
             { key: 'unpaidLeave', icon: '⚪', color: 'bg-gray-400' },
+            { key: 'periodicLeave', icon: '🟤', color: 'bg-amber-600' },
             { key: 'officialHoliday', icon: '⬜', color: 'bg-gray-200' },
             { key: 'onMission', icon: '🔷', color: 'bg-cyan-500' }
         ],
@@ -6073,13 +6076,14 @@
                 const sickLeave = empAtt.filter(a => a.status === 'sickLeave').length;
                 const emergencyLeave = empAtt.filter(a => a.status === 'emergencyLeave').length;
                 const unpaidLeave = empAtt.filter(a => a.status === 'unpaidLeave').length;
+                const periodicLeave = empAtt.filter(a => a.status === 'periodicLeave').length;
                 const officialHoliday = empAtt.filter(a => a.status === 'officialHoliday').length;
                 const onMission = empAtt.filter(a => a.status === 'onMission').length;
                 
                 const approvedCount = empAtt.filter(a => a.approved === true).length;
                 const unapprovedCount = empAtt.length - approvedCount;
                 
-                const excusedAttendanceDays = fullDay + partialEquivalentDays + annualLeave + officialHoliday + onMission;
+                const excusedAttendanceDays = fullDay + partialEquivalentDays + annualLeave + periodicLeave + officialHoliday + onMission;
                 const unexcusedAttendanceDays = Math.max(0, daysInPeriod - excusedAttendanceDays);
                 const totalRecorded = empAtt.length;
                 const workDaysInPeriod = totalRecorded || 1;
@@ -6120,11 +6124,12 @@
                 sickLeave: acc.sickLeave + e.sickLeave,
                 emergencyLeave: acc.emergencyLeave + e.emergencyLeave,
                 unpaidLeave: acc.unpaidLeave + e.unpaidLeave,
+                periodicLeave: acc.periodicLeave + e.periodicLeave,
                 officialHoliday: acc.officialHoliday + e.officialHoliday,
                 onMission: acc.onMission + e.onMission,
                 approvedRecords: acc.approvedRecords + e.approvedCount,
                 unapprovedRecords: acc.unapprovedRecords + e.unapprovedCount
-            }), { fullDay: 0, partialCount: 0, partialEquivalentDays: 0, excusedAttendanceDays: 0, unexcusedAttendanceDays: 0, absent: 0, excusedAbsent: 0, annualLeave: 0, sickLeave: 0, emergencyLeave: 0, unpaidLeave: 0, officialHoliday: 0, onMission: 0, approvedRecords: 0, unapprovedRecords: 0 });
+            }), { fullDay: 0, partialCount: 0, partialEquivalentDays: 0, excusedAttendanceDays: 0, unexcusedAttendanceDays: 0, absent: 0, excusedAbsent: 0, annualLeave: 0, sickLeave: 0, emergencyLeave: 0, unpaidLeave: 0, periodicLeave: 0, officialHoliday: 0, onMission: 0, approvedRecords: 0, unapprovedRecords: 0 });
             
             const typeLabel = employeeTypeFilter === 'all' ? '' : ` (${t(employeeTypeFilter)})`;
             
@@ -6268,6 +6273,7 @@
                                     <th class="px-2 py-2 text-center">🟣 ${t('sickLeave')}</th>
                                     <th class="px-2 py-2 text-center">🩷 ${t('emergencyLeave')}</th>
                                     <th class="px-2 py-2 text-center">⚪ ${t('unpaidLeave')}</th>
+                                    <th class="px-2 py-2 text-center">🟤 ${t('periodicLeave')}</th>
                                     <th class="px-2 py-2 text-center">⬜ ${t('officialHoliday')}</th>
                                     <th class="px-2 py-2 text-center">🔷 ${t('onMission')}</th>
                                     <th class="px-2 py-2 text-center">${t('daysInPeriod')}</th>
@@ -6293,6 +6299,7 @@
                                         <td class="px-2 py-2 text-center text-purple-600">${emp.sickLeave}</td>
                                         <td class="px-2 py-2 text-center">${emp.emergencyLeave}</td>
                                         <td class="px-2 py-2 text-center text-gray-600">${emp.unpaidLeave}</td>
+                                        <td class="px-2 py-2 text-center">${emp.periodicLeave || 0}</td>
                                         <td class="px-2 py-2 text-center">${emp.officialHoliday}</td>
                                         <td class="px-2 py-2 text-center text-cyan-600">${emp.onMission}</td>
                                         <td class="px-2 py-2 text-center font-medium">${emp.daysInPeriod}</td>
@@ -6406,6 +6413,7 @@
                           att.status === 'sickLeave' || 
                           att.status === 'emergencyLeave' || 
                           att.status === 'unpaidLeave' || 
+                          att.status === 'periodicLeave' ||
                           att.status === 'officialHoliday' || 
                           att.status === 'onMission') {
                     dayValue = 1; // جميع الإجازات (مؤجورة) = 1
@@ -6426,6 +6434,7 @@
                 excused: attendance.filter(a => a.status === 'excusedAbsent').length,
                 annual: attendance.filter(a => a.status === 'annualLeave').length,
                 sick: attendance.filter(a => a.status === 'sickLeave').length,
+                periodic: attendance.filter(a => a.status === 'periodicLeave').length,
                 mission: attendance.filter(a => a.status === 'onMission').length
             };
             
@@ -6542,6 +6551,7 @@
                                               att.status === 'sickLeave' || 
                                               att.status === 'emergencyLeave' || 
                                               att.status === 'unpaidLeave' || 
+                                              att.status === 'periodicLeave' ||
                                               att.status === 'officialHoliday' || 
                                               att.status === 'onMission') {
                                         numericValue = 1; // جميع الإجازات (مؤجورة) = 1
