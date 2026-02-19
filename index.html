@@ -570,6 +570,12 @@
                     </a>
                 </div>
                 
+                <a href="#" onclick="showPage('help')" class="sidebar-item flex items-center gap-3 px-4 py-3 rounded-lg text-gray-700" data-page="help">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <span data-translate="help">المساعدة</span>
+                </a>
                 <a href="#" onclick="showPage('settings')" class="sidebar-item flex items-center gap-3 px-4 py-3 rounded-lg text-gray-700" data-page="settings">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
@@ -622,6 +628,9 @@
                 <div id="page-users" class="page-content hidden">
                     <!-- سيتم تحميلها ديناميكياً -->
                 </div>
+                
+                <!-- صفحة المساعدة -->
+                <div id="page-help" class="page-content hidden"></div>
                 
                 <!-- صفحة الإعدادات -->
                 <div id="page-settings" class="page-content hidden">
@@ -728,6 +737,7 @@
             attendance: "الحضور",
             reports: "التقارير",
             users: "المستخدمين",
+            help: "المساعدة",
             settings: "الإعدادات",
             logout: "تسجيل الخروج",
             
@@ -844,6 +854,9 @@
             exitTime: "وقت الخروج",
             returnTime: "وقت العودة",
             workHours: "ساعات العمل",
+            remainderExcusedLabel: "اعتبار فرق الدوام",
+            remainderExcusedYes: "مؤجور (إجازة زمنية)",
+            remainderExcusedNo: "غير مؤجور",
             selectStatus: "اختر حالة الحضور",
             missionDetails: "تفاصيل المهمة",
             internalMission: "مهمة داخلية (لمشروع آخر)",
@@ -1052,6 +1065,7 @@
             attendance: "Attendance",
             reports: "Reports",
             users: "Users",
+            help: "Help",
             settings: "Settings",
             logout: "Logout",
             
@@ -1168,6 +1182,9 @@
             exitTime: "Exit Time",
             returnTime: "Return Time",
             workHours: "Work Hours",
+            remainderExcusedLabel: "Partial remainder counts as",
+            remainderExcusedYes: "Excused (time allowance)",
+            remainderExcusedNo: "Unexcused",
             selectStatus: "Select attendance status",
             missionDetails: "Mission Details",
             internalMission: "Internal Mission (to another project)",
@@ -1957,6 +1974,9 @@
                 break;
             case 'users':
                 loadUsers();
+                break;
+            case 'help':
+                loadHelp();
                 break;
             case 'settings':
                 loadSettings();
@@ -4967,6 +4987,16 @@
                                        class="px-2 py-1 border rounded text-sm">
                             </div>
                         </div>
+                        
+                        <div class="pt-2 border-t border-yellow-200">
+                            <p class="text-xs font-medium text-yellow-800 mb-2">${t('remainderExcusedLabel')}</p>
+                            <label class="flex items-center gap-3 p-2 bg-white rounded border cursor-pointer hover:bg-gray-50">
+                                <input type="checkbox" id="partial-remainder-excused" class="rounded text-primary-600"
+                                       ${partialDetails.remainderExcused ? 'checked' : ''}>
+                                <span class="flex-1">${t('remainderExcusedYes')}</span>
+                            </label>
+                            <p class="text-xs text-gray-500 mt-1">${currentLanguage === 'ar' ? 'إذا غير محدد: يُحسب الفرق غير مؤجور' : 'If unchecked: remainder counts as unexcused'}</p>
+                        </div>
                     </div>
                     
                     <div class="flex gap-2 text-xs text-gray-500 pt-2 border-t">
@@ -5109,6 +5139,9 @@
                 partialDetails.breakOutTime = document.getElementById('partial-break-out')?.value || '';
                 partialDetails.breakInTime = document.getElementById('partial-break-in')?.value || '';
             }
+            
+            const remainderExcusedEl = document.getElementById('partial-remainder-excused');
+            partialDetails.remainderExcused = remainderExcusedEl ? remainderExcusedEl.checked : false;
             
             attendanceRecord.partialDetails = partialDetails;
         }
@@ -6068,7 +6101,10 @@
                 const fullDay = empAtt.filter(a => a.status === 'full_day').length;
                 const partialRecords = empAtt.filter(a => a.status === 'partial');
                 const partialCount = partialRecords.length;
-                const partialEquivalentDays = partialRecords.reduce((sum, r) => sum + getPartialEquivalentDays(r), 0);
+                const partialEquivalentDays = partialRecords.reduce((sum, r) => {
+                    const remainderExcused = r.partialDetails?.remainderExcused === true;
+                    return sum + (remainderExcused ? 1 : getPartialEquivalentDays(r));
+                }, 0);
                 
                 const absent = empAtt.filter(a => a.status === 'absent').length;
                 const excusedAbsent = empAtt.filter(a => a.status === 'excusedAbsent').length;
@@ -6407,7 +6443,7 @@
                 if (att.status === 'full_day') {
                     dayValue = 1; // حضور كامل = 1
                 } else if (att.status === 'partial') {
-                    dayValue = getPartialEquivalentDays(att); // حضور جزئي = حسب الساعات
+                    dayValue = att.partialDetails?.remainderExcused === true ? 1 : getPartialEquivalentDays(att);
                 } else if (att.status === 'excusedAbsent' || 
                           att.status === 'annualLeave' || 
                           att.status === 'sickLeave' || 
@@ -6545,7 +6581,7 @@
                                     if (att.status === 'full_day') {
                                         numericValue = 1; // حضور كامل = 1
                                     } else if (att.status === 'partial') {
-                                        numericValue = getPartialEquivalentDays(att); // حضور جزئي = حسب الساعات
+                                        numericValue = att.partialDetails?.remainderExcused === true ? 1 : getPartialEquivalentDays(att);
                                     } else if (att.status === 'excusedAbsent' || 
                                               att.status === 'annualLeave' || 
                                               att.status === 'sickLeave' || 
@@ -6614,7 +6650,10 @@
             const formatTime = (ts) => {
                 if (!ts || !ts.toDate) return '—';
                 const d = ts.toDate();
-                return d.toLocaleString(currentLanguage === 'ar' ? 'ar-SA' : 'en-GB', { dateStyle: 'short', timeStyle: 'short' });
+                const dateStr = formatDate(d);
+                const hours = String(d.getHours()).padStart(2, '0');
+                const minutes = String(d.getMinutes()).padStart(2, '0');
+                return `${dateStr} ${hours}:${minutes}`;
             };
             container.innerHTML = `
                 <div class="card p-6">
@@ -7254,6 +7293,162 @@
             console.error('Error deleting user:', error);
             showToast(t('error'), 'error');
         }
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════════
+    // صفحة المساعدة
+    // ═══════════════════════════════════════════════════════════════════════
+    
+    function loadHelp() {
+        const container = document.getElementById('page-help');
+        const isAr = currentLanguage === 'ar';
+        const content = isAr ? {
+            overviewTitle: 'نظرة عامة على البرنامج',
+            overview: 'نظام الحضور والانصراف يساعد في إدارة المشاريع والموظفين والآليات وتسجيل الحضور اليومي وإصدار التقارير. البيانات تُخزّن في السحابة (Firebase) ويمكن لعدة مستخدمين العمل حسب صلاحياتهم.',
+            sidebarTitle: 'القائمة الجانبية والصفحات',
+            dashboard: 'لوحة التحكم: ملخص سريع (عدد المشاريع، الموظفين، الآليات) واختصارات للصفحات الرئيسية.',
+            projects: 'المشاريع: إضافة وتعديل وحذف المشاريع، وضبط بداية ونهاية الدوام الافتراضية لكل مشروع.',
+            employees: 'الموظفون: إدارة الموظفين (شهري/يومي)، ربطهم بمشروع، جدول الدوام، نقل بين المشاريع، سجل الأجور.',
+            vehicles: 'الآليات: إدارة الآليات وربطها بالمشاريع.',
+            attendance: 'الحضور: اختيار المشروع والشهر، تسجيل حضور الموظفين والآليات يومياً (يوم كامل، جزئي، غياب، إجازات، مهمة...)، اعتماد الدوام، تسجيل جماعي، اعتماد جزئي.',
+            reports: 'التقارير: تقرير بالمشروع (لفترة زمنية) وتقرير بموظف (لفترة)، مع المؤجور/غير المؤجور والأجور للموظفين اليوميين.',
+            users: 'المستخدمون (للمدير): إضافة وتعديل مستخدمين وأدوارهم والمشاريع المسندة.',
+            activityLog: 'سجل النشاط (للمدير): سجل بالعمليات (إضافة، تعديل، حذف) مع اسم المستخدم والوقت.',
+            wageMgmt: 'إدارة الأجور الشهرية (للمدير): إعداد أجور الموظفين الشهرية.',
+            settings: 'الإعدادات: اللغة، تغيير كلمة المرور، معلومات الحساب.',
+            windowsTitle: 'الواجهات والنوافذ',
+            windowsAdd: 'نوافذ الإضافة/التعديل: تظهر عند "إضافة" أو "تعديل" للمشاريع والموظفين والآليات؛ تحتوي حقول النموذج وأزرار حفظ وإلغاء.',
+            windowsAtt: 'نافذة الحضور: تفتح عند النقر على خلية يوم لموظف أو آلية؛ تعرض حالة الحضور الحالية وتتيح اختيار الحالة (يوم كامل، جزئي، غياب، إجازات، مهمة...). للدوام الجزئي تظهر "تفاصيل الدوام الجزئي" (تأخر، انصراف مبكر، غادر وعاد، واعتبار فرق الدوام مؤجوراً أو غير مؤجور).',
+            windowsApproval: 'نافذة الاعتماد: لتأكيد اعتماد أو إلغاء اعتماد سجلات الحضور المحددة (حسب الصلاحيات).',
+            windowsBulk: 'نافذة التسجيل الجماعي: لتسجيل حضور واحد لعدة أيام أو عدة موظفين/آليات دفعة واحدة.',
+            rolesTitle: 'القيود على المستخدمين',
+            roleManager: 'المدير: يرى كل المشاريع والموظفين والآليات؛ يضيف ويعدّل ويحذف؛ يعتمد ويلغي الاعتماد؛ يدير المستخدمين وسجل النشاط والأجور الشهرية.',
+            roleSupervisor: 'المشرف: يرى فقط المشاريع والموظفين والآليات المسندة إليه (المشاريع المسندة)؛ يسجّل الحضور ويعدّله خلال 24 ساعة من الإدخال؛ لا يستطيع تعديل سجل معتمد إلا إذا كان المدير.',
+            roleApprover: 'المعتمد: يرى المشاريع المسندة فقط؛ يعتمد الدوام (اعتماد كامل أو جزئي)؛ لا يسجّل ولا يعدّل الحضور.',
+            rule24h: 'قيد 24 ساعة: بعد مرور 24 ساعة من تسجيل الحضور، لا يستطيع المشرف تعديل السجل؛ التعديل للمدير فقط. السجلات المعتمدة لا يعدّلها إلا المدير.',
+            partialTitle: 'الحضور والدوام الجزئي',
+            partialRecord: 'تسجيل الحضور: من صفحة الحضور اختر المشروع والشهر والتبويب (موظفون/آليات)، ثم انقر على خلية اليوم للموظف أو الآلية لفتح نافذة التسجيل.',
+            partialDetails: 'الدوام الجزئي: اختر "جزئي" ثم املأ تفاصيل الدوام الجزئي (تأخر في الحضور، انصراف مبكر، غادر وعاد إن وجد). يمكن تحديد "اعتبار فرق الدوام: مؤجور (إجازة زمنية)" لاحتساب اليوم كاملاً مؤجوراً في التقارير، أو تركه غير محدد لاحتساب الأيام المعادلة فقط مؤجورة.',
+            partialApproval: 'الاعتماد: من نفس صفحة الحضور يمكن اعتماد أسبوع كامل أو اعتماد جزئي لتواريخ محددة (للمعتمد أو المدير).',
+            reportsTitle: 'التقارير',
+            reportProject: 'تقرير المشروع: يلخص الحضور لجميع الموظفين/الآليات في مشروع (أو كل المشاريع للمدير) لفترة معينة؛ يعرض المؤجور وغير المؤجور والأيام المعادلة للجزئي. الدوام الجزئي يُحتسب حسب اختيار "فرق الدوام مؤجور" في كل سجل.',
+            reportEmployee: 'تقرير الموظف: يعرض سجل حضور موظف واحد لفترة؛ القيمة الرقمية لكل يوم (1 أو الأيام المعادلة للجزئي) وتأثيرها على الراتب للموظفين اليوميين.',
+            tipsTitle: 'نصائح',
+            tipLang: 'يمكن تغيير اللغة من الإعدادات. التاريخ المعتمد في النظام ميلادي بتنسيق يوم-شهر-سنة.',
+            tipPrint: 'التقارير قابلة للطباعة من واجهة التقرير نفسه.',
+            tipActivity: 'للمدير: راجع سجل النشاط لمتابعة من قام بكل عملية.'
+        } : {
+            overviewTitle: 'Program Overview',
+            overview: 'The Attendance and Departure System helps manage projects, employees, vehicles, daily attendance, and reports. Data is stored in the cloud (Firebase) and multiple users can work according to their permissions.',
+            sidebarTitle: 'Sidebar and Pages',
+            dashboard: 'Dashboard: Quick summary (projects, employees, vehicles count) and shortcuts.',
+            projects: 'Projects: Add, edit, delete projects; set default work start and end times.',
+            employees: 'Employees: Manage employees (monthly/daily), assign to project, schedule, transfers, wage history.',
+            vehicles: 'Vehicles: Manage vehicles and assign to projects.',
+            attendance: 'Attendance: Select project and month; record daily attendance (full, partial, absent, leave, mission...); approve; bulk entry; partial approval.',
+            reports: 'Reports: Project report (for a date range) and employee report; excused/unexcused and wages for daily employees.',
+            users: 'Users (Manager): Add and edit users, roles, and assigned projects.',
+            activityLog: 'Activity Log (Manager): Log of actions (add, edit, delete) with user and time.',
+            wageMgmt: 'Monthly Wage Management (Manager): Set employee monthly wages.',
+            settings: 'Settings: Language, change password, account info.',
+            windowsTitle: 'Interfaces and Windows',
+            windowsAdd: 'Add/Edit modals: Shown when adding or editing projects, employees, or vehicles; contain form fields and save/cancel.',
+            windowsAtt: 'Attendance window: Opens when clicking a day cell; shows current status and lets you choose (full day, partial, absent, leave, mission...). For partial, "Partial details" appear (late arrival, early leave, break out); and option to count remainder as excused or unexcused.',
+            windowsApproval: 'Approval window: Approve or unapprove selected attendance records (by role).',
+            windowsBulk: 'Bulk entry window: Record one status for multiple days or multiple employees/vehicles at once.',
+            rolesTitle: 'User Roles and Restrictions',
+            roleManager: 'Manager: Sees all projects, employees, vehicles; add, edit, delete; approve and unapprove; manage users, activity log, wages.',
+            roleSupervisor: 'Supervisor: Sees only assigned projects and their employees/vehicles; records and edits attendance within 24 hours of entry; cannot edit approved records (only manager can).',
+            roleApprover: 'Approver: Sees only assigned projects; approves attendance (full or partial); does not record or edit attendance.',
+            rule24h: '24-hour rule: After 24 hours from recording attendance, supervisor cannot edit; only manager can. Only manager can edit approved records.',
+            partialTitle: 'Attendance and Partial Work',
+            partialRecord: 'Recording: From Attendance page, select project and month, then click a day cell to open the attendance window.',
+            partialDetails: 'Partial: Choose "Partial" and fill details (late arrival, early leave, break if any). You can check "Remainder excused (time allowance)" to count the day as fully excused in reports, or leave unchecked to count only equivalent days as excused.',
+            partialApproval: 'Approval: From the same page you can approve a full week or partial approval for selected dates (approver or manager).',
+            reportsTitle: 'Reports',
+            reportProject: 'Project report: Summarizes attendance for all employees/vehicles in a project (or all projects for manager) for a date range; shows excused, unexcused, partial equivalent days. Partial is calculated per record using the "remainder excused" option.',
+            reportEmployee: 'Employee report: Shows one employee\'s attendance for a period; numeric value per day (1 or partial equivalent) and effect on salary for daily employees.',
+            tipsTitle: 'Tips',
+            tipLang: 'Change language in Settings. The system uses Gregorian date in day-month-year format.',
+            tipPrint: 'Reports can be printed from the report screen.',
+            tipActivity: 'Managers: Use Activity Log to see who performed each action.'
+        };
+        container.innerHTML = `
+            <div class="max-w-4xl mx-auto">
+                <div class="card p-6 md:p-8">
+                    <h2 class="text-2xl font-bold text-gray-800 mb-6 pb-2 border-b">${isAr ? '📖 المساعدة' : '📖 Help'}</h2>
+                    
+                    <div class="space-y-6 text-gray-700">
+                        <section>
+                            <h3 class="text-lg font-bold text-gray-800 mb-2">${content.overviewTitle}</h3>
+                            <p class="leading-relaxed">${content.overview}</p>
+                        </section>
+                        
+                        <section>
+                            <h3 class="text-lg font-bold text-gray-800 mb-2">${content.sidebarTitle}</h3>
+                            <ul class="list-disc list-inside space-y-2 pl-2">
+                                <li>${content.dashboard}</li>
+                                <li>${content.projects}</li>
+                                <li>${content.employees}</li>
+                                <li>${content.vehicles}</li>
+                                <li>${content.attendance}</li>
+                                <li>${content.reports}</li>
+                                <li>${content.users}</li>
+                                <li>${content.activityLog}</li>
+                                <li>${content.wageMgmt}</li>
+                                <li>${content.settings}</li>
+                            </ul>
+                        </section>
+                        
+                        <section>
+                            <h3 class="text-lg font-bold text-gray-800 mb-2">${content.windowsTitle}</h3>
+                            <ul class="list-disc list-inside space-y-2 pl-2">
+                                <li>${content.windowsAdd}</li>
+                                <li>${content.windowsAtt}</li>
+                                <li>${content.windowsApproval}</li>
+                                <li>${content.windowsBulk}</li>
+                            </ul>
+                        </section>
+                        
+                        <section>
+                            <h3 class="text-lg font-bold text-gray-800 mb-2">${content.rolesTitle}</h3>
+                            <ul class="list-disc list-inside space-y-2 pl-2">
+                                <li>${content.roleManager}</li>
+                                <li>${content.roleSupervisor}</li>
+                                <li>${content.roleApprover}</li>
+                                <li>${content.rule24h}</li>
+                            </ul>
+                        </section>
+                        
+                        <section>
+                            <h3 class="text-lg font-bold text-gray-800 mb-2">${content.partialTitle}</h3>
+                            <ul class="list-disc list-inside space-y-2 pl-2">
+                                <li>${content.partialRecord}</li>
+                                <li>${content.partialDetails}</li>
+                                <li>${content.partialApproval}</li>
+                            </ul>
+                        </section>
+                        
+                        <section>
+                            <h3 class="text-lg font-bold text-gray-800 mb-2">${content.reportsTitle}</h3>
+                            <ul class="list-disc list-inside space-y-2 pl-2">
+                                <li>${content.reportProject}</li>
+                                <li>${content.reportEmployee}</li>
+                            </ul>
+                        </section>
+                        
+                        <section>
+                            <h3 class="text-lg font-bold text-gray-800 mb-2">${content.tipsTitle}</h3>
+                            <ul class="list-disc list-inside space-y-2 pl-2">
+                                <li>${content.tipLang}</li>
+                                <li>${content.tipPrint}</li>
+                                <li>${content.tipActivity}</li>
+                            </ul>
+                        </section>
+                    </div>
+                </div>
+            </div>
+        `;
     }
     
     // ═══════════════════════════════════════════════════════════════════════
