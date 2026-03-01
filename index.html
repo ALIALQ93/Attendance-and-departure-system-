@@ -845,6 +845,10 @@
             periodicLeave: "إجازة دورية",
             officialHoliday: "عطلة رسمية",
             onMission: "في مهمة",
+            shift: "شفت",
+            shiftDetails: "تفاصيل الشفت",
+            shiftStartTime: "بداية الشفت",
+            shiftEndTime: "نهاية الشفت",
             lateArrival: "تأخر في الحضور",
             earlyLeave: "انصراف مبكر",
             breakOut: "غادر وعاد",
@@ -857,6 +861,9 @@
             remainderExcusedLabel: "اعتبار فرق الدوام",
             remainderExcusedYes: "مؤجور (إجازة زمنية)",
             remainderExcusedNo: "غير مؤجور",
+            sickLeaveExcusedLabel: "اعتبار الإجازة مؤجورة",
+            sickLeaveExcusedYes: "مؤجور",
+            sickLeaveExcusedNo: "غير مؤجور",
             selectStatus: "اختر حالة الحضور",
             missionDetails: "تفاصيل المهمة",
             internalMission: "مهمة داخلية (لمشروع آخر)",
@@ -971,6 +978,9 @@
             // التقارير
             projectReport: "تقرير المشروع",
             employeeReport: "تقرير الموظف",
+            dailyWagesReport: "تقرير الأجور اليومية",
+            approvedDays: "أيام معتمدة",
+            totalWage: "الأجر الكلي",
             attendanceRate: "نسبة الحضور",
             approvedRecords: "سجلات معتمدة",
             unapprovedRecords: "سجلات غير معتمدة",
@@ -1173,6 +1183,10 @@
             periodicLeave: "Periodic Leave",
             officialHoliday: "Official Holiday",
             onMission: "On Mission",
+            shift: "Shift",
+            shiftDetails: "Shift Details",
+            shiftStartTime: "Shift Start",
+            shiftEndTime: "Shift End",
             lateArrival: "Late Arrival",
             earlyLeave: "Early Leave",
             breakOut: "Break Out",
@@ -1185,6 +1199,9 @@
             remainderExcusedLabel: "Partial remainder counts as",
             remainderExcusedYes: "Excused (time allowance)",
             remainderExcusedNo: "Unexcused",
+            sickLeaveExcusedLabel: "Consider sick leave as excused",
+            sickLeaveExcusedYes: "Excused",
+            sickLeaveExcusedNo: "Unexcused",
             selectStatus: "Select attendance status",
             missionDetails: "Mission Details",
             internalMission: "Internal Mission (to another project)",
@@ -1299,6 +1316,9 @@
             // Reports
             projectReport: "Project Report",
             employeeReport: "Employee Report",
+            dailyWagesReport: "Daily Wages Report",
+            approvedDays: "Approved days",
+            totalWage: "Total wage",
             attendanceRate: "Attendance Rate",
             approvedRecords: "Approved records",
             unapprovedRecords: "Unapproved records",
@@ -1415,6 +1435,25 @@
     // التاريخ الحالي
     function getCurrentDate() {
         return formatDate(new Date());
+    }
+    
+    // توحيد قيمة التاريخ من Firestore إلى نص yyyy-mm-dd للمقارنة والتصفية في التقارير
+    function toYyyyMmDd(val) {
+        if (val == null || val === '') return '';
+        if (typeof val === 'string') {
+            if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
+            const parts = val.split('-');
+            if (parts.length === 3 && parts[0].length <= 4 && parts[2].length <= 4) {
+                const year = parts.length === 3 && parts[0].length === 4 ? parts[0] : parts[2];
+                const month = parts[1].padStart(2, '0');
+                const day = (parts[0].length === 4 ? parts[2] : parts[0]).padStart(2, '0');
+                return year + '-' + month + '-' + day;
+            }
+            return '';
+        }
+        if (val.toDate && typeof val.toDate === 'function') return toYyyyMmDd(val.toDate());
+        if (val instanceof Date) return val.getFullYear() + '-' + String(val.getMonth() + 1).padStart(2, '0') + '-' + String(val.getDate()).padStart(2, '0');
+        return '';
     }
     
     // عرض Toast
@@ -4385,7 +4424,8 @@
             { key: 'unpaidLeave', icon: '⚪', color: 'bg-gray-400' },
             { key: 'periodicLeave', icon: '🟤', color: 'bg-amber-600' },
             { key: 'officialHoliday', icon: '⬜', color: 'bg-gray-200' },
-            { key: 'onMission', icon: '🔷', color: 'bg-cyan-500' }
+            { key: 'onMission', icon: '🔷', color: 'bg-cyan-500' },
+            { key: 'shift', icon: '🟦', color: 'bg-indigo-500' }
         ],
         vehicle: [
             { key: 'worked', icon: '🟢', color: 'bg-green-500' },
@@ -4739,7 +4779,7 @@
             
             items.forEach(item => {
                 const itemId = item.id;
-                let summary = { full: 0, partial: 0, absent: 0, leave: 0 };
+                let summary = { full: 0, partial: 0, shift: 0, absent: 0, leave: 0 };
                 
                 // حساب الملخص للشهر كامل
                 for (let d = 1; d <= getDaysInMonth(selectedYear, selectedMonth); d++) {
@@ -4749,12 +4789,13 @@
                     if (att) {
                         if (att.status === 'full_day' || att.status === 'worked') summary.full++;
                         else if (att.status === 'partial' || att.status === 'workedPartial') summary.partial++;
+                        else if (att.status === 'shift') summary.shift++;
                         else if (att.status === 'absent') summary.absent++;
                         else if (att.status?.includes('Leave') || att.status?.includes('leave')) summary.leave++;
                     }
                 }
                 
-                const total = summary.full + summary.partial;
+                const total = summary.full + summary.partial + summary.shift;
                 const workDays = getDaysInMonth(selectedYear, selectedMonth) - 4; // تقريباً 4 أيام جمعة
                 const percentage = workDays > 0 ? Math.round((total / workDays) * 100) : 0;
                 
@@ -4788,7 +4829,7 @@
                         }).join('')}
                         <td class="px-2 py-2 text-center bg-gray-50">
                             <div class="text-xs space-y-1">
-                                <div>🟢${summary.full} 🟡${summary.partial}</div>
+                                <div>🟢${summary.full} 🟡${summary.partial} ${summary.shift ? '🟦' + summary.shift : ''}</div>
                                 <div>🔴${summary.absent} 🔵${summary.leave}</div>
                                 <div class="font-bold text-primary-600">${percentage}%</div>
                             </div>
@@ -4852,7 +4893,8 @@
     }
     
     async function openAttendancePopup(itemId, itemName, dateStr, type) {
-        const statuses = type === 'vehicles' ? attendanceStatuses.vehicle : attendanceStatuses.employee;
+        let statuses = type === 'vehicles' ? attendanceStatuses.vehicle : attendanceStatuses.employee;
+        if (type !== 'vehicles') statuses = statuses.filter(s => s.key !== 'shift' || type === 'daily');
         const key = `${itemId}_${dateStr}`;
         const currentData = attendanceChanges[key] || attendanceData[key] || {};
         const existingRecord = attendanceData[key];
@@ -4860,7 +4902,9 @@
         const currentStatus = currentData.status || '';
         const currentNote = currentData.note || '';
         const partialDetails = currentData.partialDetails || {};
+        const shiftDetails = currentData.shiftDetails || {};
         const missionDetails = currentData.missionDetails || {};
+        const sickLeaveExcused = currentData.sickLeaveExcused !== false;
         
         let readOnlyMessage = '';
         if (!canEdit && existingRecord?.approved) readOnlyMessage = t('onlyManagerCanEditApproved');
@@ -4887,7 +4931,7 @@
         }
         
         // حفظ البيانات الحالية للاستخدام
-        window.currentAttendanceData = { itemId, itemName, dateStr, type, currentStatus, partialDetails, missionDetails, otherProjects };
+        window.currentAttendanceData = { itemId, itemName, dateStr, type, currentStatus, partialDetails, shiftDetails, missionDetails, otherProjects, sickLeaveExcused };
         
         const content = `
             <div class="space-y-4">
@@ -5004,6 +5048,38 @@
                     </div>
                 </div>
                 
+                <!-- تفاصيل الشفت (للموظفين اليوميين فقط) -->
+                <div id="shift-details-section" class="${type !== 'daily' || currentStatus !== 'shift' ? 'hidden' : ''} p-4 bg-indigo-50 rounded-lg border border-indigo-200 space-y-4">
+                    <p class="font-bold text-sm text-indigo-800">🟦 ${t('shiftDetails')}</p>
+                    <div class="space-y-3">
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm text-gray-600 w-24">${t('shiftStartTime')}</span>
+                            <input type="time" id="shift-start-time" value="${shiftDetails.startTime || ''}" class="px-2 py-1 border rounded text-sm flex-1">
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm text-gray-600 w-24">${t('shiftEndTime')}</span>
+                            <input type="time" id="shift-end-time" value="${shiftDetails.endTime || ''}" class="px-2 py-1 border rounded text-sm flex-1">
+                        </div>
+                        <div class="pt-2 border-t border-indigo-200">
+                            <label class="flex items-center gap-3 p-2 bg-white rounded border cursor-pointer hover:bg-gray-50">
+                                <input type="checkbox" id="shift-remainder-excused" class="rounded text-primary-600" ${shiftDetails.remainderExcused ? 'checked' : ''}>
+                                <span class="flex-1">${t('remainderExcusedYes')}</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- تفاصيل الإجازة المرضية -->
+                <div id="sick-leave-details-section" class="${type === 'vehicles' || currentStatus !== 'sickLeave' ? 'hidden' : ''} p-4 bg-purple-50 rounded-lg border border-purple-200 space-y-4">
+                    <p class="font-bold text-sm text-purple-800">🟣 ${t('sickLeaveExcusedLabel')}</p>
+                    <label class="flex items-center gap-3 p-2 bg-white rounded border cursor-pointer hover:bg-gray-50">
+                        <input type="checkbox" id="sick-leave-excused" class="rounded text-primary-600"
+                               ${sickLeaveExcused ? 'checked' : ''}>
+                        <span class="flex-1">${t('sickLeaveExcusedYes')}</span>
+                    </label>
+                    <p class="text-xs text-gray-500">${currentLanguage === 'ar' ? 'إذا غير محدد: تُحسب غير مؤجورة' : 'If unchecked: counts as unexcused'}</p>
+                </div>
+                
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">${t('notes')}</label>
                     <textarea id="attendance-note" rows="2" class="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500">${currentNote}</textarea>
@@ -5086,10 +5162,22 @@
             partialSection.classList.toggle('hidden', status !== 'partial');
         }
         
+        // إظهار/إخفاء تفاصيل الشفت (للموظفين اليوميين فقط)
+        const shiftSection = document.getElementById('shift-details-section');
+        if (shiftSection) {
+            shiftSection.classList.toggle('hidden', status !== 'shift' || window.currentAttendanceData.type !== 'daily');
+        }
+        
         // إظهار/إخفاء تفاصيل المهمة
         const missionSection = document.getElementById('mission-details-section');
         if (missionSection && window.currentAttendanceData.type !== 'vehicles') {
             missionSection.classList.toggle('hidden', status !== 'onMission');
+        }
+        
+        // إظهار/إخفاء تفاصيل الإجازة المرضية
+        const sickLeaveSection = document.getElementById('sick-leave-details-section');
+        if (sickLeaveSection && window.currentAttendanceData.type !== 'vehicles') {
+            sickLeaveSection.classList.toggle('hidden', status !== 'sickLeave');
         }
     }
     
@@ -5146,6 +5234,24 @@
             attendanceRecord.partialDetails = partialDetails;
         }
         
+        // إضافة تفاصيل الشفت إذا كانت الحالة شفت (للموظفين اليوميين فقط)
+        if (status === 'shift' && data.type === 'daily') {
+            const shiftDetails = {};
+            const startEl = document.getElementById('shift-start-time');
+            const endEl = document.getElementById('shift-end-time');
+            const remainderEl = document.getElementById('shift-remainder-excused');
+            if (startEl) shiftDetails.startTime = startEl.value || '';
+            if (endEl) shiftDetails.endTime = endEl.value || '';
+            if (remainderEl) shiftDetails.remainderExcused = remainderEl.checked;
+            attendanceRecord.shiftDetails = shiftDetails;
+        }
+        
+        // إضافة خيار اعتبار الإجازة المرضية مؤجورة أو غير مؤجورة
+        if (status === 'sickLeave' && data.type !== 'vehicles') {
+            const sickLeaveExcusedEl = document.getElementById('sick-leave-excused');
+            attendanceRecord.sickLeaveExcused = sickLeaveExcusedEl ? sickLeaveExcusedEl.checked : true;
+        }
+        
         // إضافة تفاصيل المهمة إذا كانت الحالة في مهمة
         if (status === 'onMission' && data.type !== 'vehicles') {
             const internalRadio = document.getElementById('mission-internal');
@@ -5192,8 +5298,8 @@
         window.currentAttendanceData = { itemId, dateStr, type, selectedStatus: status };
         selectAttendanceStatus(status);
         
-        // إذا لم يكن جزئي أو مهمة، احفظ مباشرة
-        if ((status !== 'partial' && status !== 'onMission') || type === 'vehicles') {
+        // إذا لم يكن جزئي أو شفت أو مهمة، احفظ مباشرة
+        if ((status !== 'partial' && status !== 'shift' && status !== 'onMission') || type === 'vehicles') {
             saveCurrentAttendance();
         }
     }
@@ -5915,6 +6021,36 @@
                             </button>
                         </div>
                     </div>
+                    
+                    <!-- تقرير الأجور اليومية -->
+                    <div class="card p-6">
+                        <h3 class="font-bold text-lg mb-4 flex items-center gap-2">
+                            💰 ${t('dailyWagesReport')}
+                        </h3>
+                        <p class="text-sm text-gray-600 mb-4">${currentLanguage === 'ar' ? 'يعرض الدوام والأجر اليومي والأجر الكلي لكل موظف يومي في الفترة المحددة.' : 'Shows attendance, daily wage per day, and total wage for each daily employee in the selected period.'}</p>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">${t('projects')}</label>
+                                <select id="report-wages-project" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500">
+                                    ${currentUserData.role === 'manager' ? `<option value="all">${t('all')}</option>` : ''}
+                                    ${projects.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">${t('from')}</label>
+                                    <input type="date" id="report-wages-from" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500" value="${reportProjectDefaultFrom}">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">${t('to')}</label>
+                                    <input type="date" id="report-wages-to" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500" value="${reportProjectDefaultTo}">
+                                </div>
+                            </div>
+                            <button onclick="generateDailyWagesReport()" class="w-full py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">
+                                ${t('view')} ${t('dailyWagesReport')}
+                            </button>
+                        </div>
+                    </div>
                 </div>
                 
                 <!-- نتائج التقرير -->
@@ -6023,6 +6159,21 @@
         return Math.round(dayFraction * 100) / 100;
     }
     
+    function getShiftEquivalentDays(record) {
+        if (record.status !== 'shift' || !record.shiftDetails) return 0.5;
+        const sd = record.shiftDetails;
+        const start = sd.startTime;
+        const end = sd.endTime;
+        if (!start || !end) return 0.5;
+        const parseTime = (t) => {
+            const [h, m] = (t || '0:0').split(':').map(Number);
+            return (h || 0) + (m || 0) / 60;
+        };
+        const hours = Math.max(0, parseTime(end) - parseTime(start));
+        const dayFraction = Math.min(1, Math.max(0, hours / 8));
+        return Math.round(dayFraction * 100) / 100;
+    }
+    
     async function generateProjectReport() {
         const projectId = document.getElementById('report-project').value;
         const fromDate = document.getElementById('report-project-from').value;
@@ -6056,13 +6207,16 @@
                 const vehSnap = await db.collection('vehicles').where('projectId', '==', project.id).get();
                 vehSnap.forEach(doc => allVehicles.push({ id: doc.id, ...doc.data() }));
                 
-                // جلب الحضور للموظفين
+                // جلب الحضور للموظفين (توحيد التاريخ yyyy-mm-dd للمقارنة الصحيحة)
                 const attSnap = await db.collection('attendance').where('projectId', '==', project.id).get();
+                const fromNorm = toYyyyMmDd(fromDate) || fromDate;
+                const toNorm = toYyyyMmDd(toDate) || toDate;
                 attSnap.forEach(doc => {
                     const data = doc.data();
-                    if (data.date >= fromDate && data.date <= toDate) {
+                    const dateStr = toYyyyMmDd(data.date);
+                    if (dateStr && dateStr >= fromNorm && dateStr <= toNorm) {
                         if (!allAttendance[data.employeeId]) allAttendance[data.employeeId] = [];
-                        allAttendance[data.employeeId].push(data);
+                        allAttendance[data.employeeId].push({ ...data, date: dateStr });
                     }
                 });
                 
@@ -6070,9 +6224,10 @@
                 const vehAttSnap = await db.collection('vehicleAttendance').where('projectId', '==', project.id).get();
                 vehAttSnap.forEach(doc => {
                     const data = doc.data();
-                    if (data.date >= fromDate && data.date <= toDate) {
+                    const dateStr = toYyyyMmDd(data.date);
+                    if (dateStr && dateStr >= fromNorm && dateStr <= toNorm) {
                         if (!allVehicleAttendance[data.vehicleId]) allVehicleAttendance[data.vehicleId] = [];
-                        allVehicleAttendance[data.vehicleId].push(data);
+                        allVehicleAttendance[data.vehicleId].push({ ...data, date: dateStr });
                     }
                 });
             }
@@ -6085,9 +6240,9 @@
             
             const vehicles = allVehicles;
             
-            // عدد أيام الفترة (من - إلى شاملاً)
-            const fromParts = fromDate.split('-').map(Number);
-            const toParts = toDate.split('-').map(Number);
+            // عدد أيام الفترة (من - إلى شاملاً) باستخدام التواريخ الموحدة
+            const fromParts = (toYyyyMmDd(fromDate) || fromDate).split('-').map(Number);
+            const toParts = (toYyyyMmDd(toDate) || toDate).split('-').map(Number);
             const fromD = new Date(fromParts[0], fromParts[1] - 1, fromParts[2]);
             const toD = new Date(toParts[0], toParts[1] - 1, toParts[2]);
             const daysInPeriod = Math.max(1, Math.round((toD - fromD) / (24 * 60 * 60 * 1000)) + 1);
@@ -6109,17 +6264,25 @@
                 const absent = empAtt.filter(a => a.status === 'absent').length;
                 const excusedAbsent = empAtt.filter(a => a.status === 'excusedAbsent').length;
                 const annualLeave = empAtt.filter(a => a.status === 'annualLeave').length;
-                const sickLeave = empAtt.filter(a => a.status === 'sickLeave').length;
+                const sickLeaveRecords = empAtt.filter(a => a.status === 'sickLeave');
+                const sickLeave = sickLeaveRecords.length;
+                const sickLeaveExcusedDays = sickLeaveRecords.reduce((s, r) => s + (r.sickLeaveExcused === false ? 0 : 1), 0);
                 const emergencyLeave = empAtt.filter(a => a.status === 'emergencyLeave').length;
                 const unpaidLeave = empAtt.filter(a => a.status === 'unpaidLeave').length;
                 const periodicLeave = empAtt.filter(a => a.status === 'periodicLeave').length;
                 const officialHoliday = empAtt.filter(a => a.status === 'officialHoliday').length;
                 const onMission = empAtt.filter(a => a.status === 'onMission').length;
+                const shiftRecords = empAtt.filter(a => a.status === 'shift');
+                const shiftCount = shiftRecords.length;
+                const shiftEquivalentDays = shiftRecords.reduce((sum, r) => {
+                    const remainderExcused = r.shiftDetails?.remainderExcused === true;
+                    return sum + (remainderExcused ? 1 : getShiftEquivalentDays(r));
+                }, 0);
                 
                 const approvedCount = empAtt.filter(a => a.approved === true).length;
                 const unapprovedCount = empAtt.length - approvedCount;
                 
-                const excusedAttendanceDays = fullDay + partialEquivalentDays + annualLeave + periodicLeave + officialHoliday + onMission;
+                const excusedAttendanceDays = fullDay + partialEquivalentDays + shiftEquivalentDays + annualLeave + sickLeaveExcusedDays + periodicLeave + officialHoliday + onMission;
                 const unexcusedAttendanceDays = Math.max(0, daysInPeriod - excusedAttendanceDays);
                 const totalRecorded = empAtt.length;
                 const workDaysInPeriod = totalRecorded || 1;
@@ -6130,6 +6293,8 @@
                     fullDay,
                     partialCount,
                     partialEquivalentDays,
+                    shiftCount,
+                    shiftEquivalentDays,
                     excusedAttendanceDays,
                     unexcusedAttendanceDays,
                     daysInPeriod,
@@ -6139,6 +6304,7 @@
                     sickLeave,
                     emergencyLeave,
                     unpaidLeave,
+                    periodicLeave,
                     officialHoliday,
                     onMission,
                     totalRecorded,
@@ -6152,6 +6318,8 @@
                 fullDay: acc.fullDay + e.fullDay,
                 partialCount: acc.partialCount + e.partialCount,
                 partialEquivalentDays: acc.partialEquivalentDays + e.partialEquivalentDays,
+                shiftCount: (acc.shiftCount || 0) + (e.shiftCount || 0),
+                shiftEquivalentDays: (acc.shiftEquivalentDays || 0) + (e.shiftEquivalentDays || 0),
                 excusedAttendanceDays: acc.excusedAttendanceDays + e.excusedAttendanceDays,
                 unexcusedAttendanceDays: acc.unexcusedAttendanceDays + e.unexcusedAttendanceDays,
                 absent: acc.absent + e.absent,
@@ -6165,7 +6333,7 @@
                 onMission: acc.onMission + e.onMission,
                 approvedRecords: acc.approvedRecords + e.approvedCount,
                 unapprovedRecords: acc.unapprovedRecords + e.unapprovedCount
-            }), { fullDay: 0, partialCount: 0, partialEquivalentDays: 0, excusedAttendanceDays: 0, unexcusedAttendanceDays: 0, absent: 0, excusedAbsent: 0, annualLeave: 0, sickLeave: 0, emergencyLeave: 0, unpaidLeave: 0, periodicLeave: 0, officialHoliday: 0, onMission: 0, approvedRecords: 0, unapprovedRecords: 0 });
+            }), { fullDay: 0, partialCount: 0, partialEquivalentDays: 0, shiftCount: 0, shiftEquivalentDays: 0, excusedAttendanceDays: 0, unexcusedAttendanceDays: 0, absent: 0, excusedAbsent: 0, annualLeave: 0, sickLeave: 0, emergencyLeave: 0, unpaidLeave: 0, periodicLeave: 0, officialHoliday: 0, onMission: 0, approvedRecords: 0, unapprovedRecords: 0 });
             
             const typeLabel = employeeTypeFilter === 'all' ? '' : ` (${t(employeeTypeFilter)})`;
             
@@ -6303,6 +6471,7 @@
                                     <th class="px-2 py-2 text-center">🟢 ${t('fullDay')}</th>
                                     <th class="px-2 py-2 text-center">🟡 ${t('partial')}</th>
                                     <th class="px-2 py-2 text-center">📊 ${t('equivalentDays')}</th>
+                                    <th class="px-2 py-2 text-center">🟦 ${t('shift')}</th>
                                     <th class="px-2 py-2 text-center">🔴 ${t('absent')}</th>
                                     <th class="px-2 py-2 text-center">🟠 ${t('excusedAbsent')}</th>
                                     <th class="px-2 py-2 text-center">🔵 ${t('annualLeave')}</th>
@@ -6329,6 +6498,7 @@
                                         <td class="px-2 py-2 text-center text-green-600">${emp.fullDay}</td>
                                         <td class="px-2 py-2 text-center text-yellow-600">${emp.partialCount}</td>
                                         <td class="px-2 py-2 text-center">${emp.partialEquivalentDays.toFixed(2)}</td>
+                                        <td class="px-2 py-2 text-center text-indigo-600">${emp.shiftCount || 0}</td>
                                         <td class="px-2 py-2 text-center text-red-600">${emp.absent}</td>
                                         <td class="px-2 py-2 text-center text-orange-600">${emp.excusedAbsent}</td>
                                         <td class="px-2 py-2 text-center text-blue-600">${emp.annualLeave}</td>
@@ -6416,18 +6586,20 @@
             const projDoc = await db.collection('projects').doc(employee.projectId).get();
             const project = projDoc.exists ? projDoc.data() : null;
             
-            // جلب الحضور (فقط من المشروع الحالي للموظف)
+            // جلب الحضور (فقط من المشروع الحالي للموظف) — توحيد التاريخ yyyy-mm-dd ليتطابق مع تقرير المشروع
             const attSnap = await db.collection('attendance')
                 .where('employeeId', '==', employeeId)
                 .where('projectId', '==', employee.projectId)
                 .get();
             
+            const fromNorm = toYyyyMmDd(fromDate) || fromDate;
+            const toNorm = toYyyyMmDd(toDate) || toDate;
             const attendance = [];
             attSnap.forEach(doc => {
                 const data = doc.data();
-                // تصفية حسب التاريخ
-                if (data.date >= fromDate && data.date <= toDate) {
-                    attendance.push({ id: doc.id, ...data });
+                const dateStr = toYyyyMmDd(data.date);
+                if (dateStr && dateStr >= fromNorm && dateStr <= toNorm) {
+                    attendance.push({ id: doc.id, ...data, date: dateStr });
                 }
             });
             
@@ -6444,9 +6616,12 @@
                     dayValue = 1; // حضور كامل = 1
                 } else if (att.status === 'partial') {
                     dayValue = att.partialDetails?.remainderExcused === true ? 1 : getPartialEquivalentDays(att);
+                } else if (att.status === 'shift') {
+                    dayValue = att.shiftDetails?.remainderExcused === true ? 1 : getShiftEquivalentDays(att);
+                } else if (att.status === 'sickLeave') {
+                    dayValue = att.sickLeaveExcused === false ? 0 : 1; // حسب اختيار المستخدم
                 } else if (att.status === 'excusedAbsent' || 
                           att.status === 'annualLeave' || 
-                          att.status === 'sickLeave' || 
                           att.status === 'emergencyLeave' || 
                           att.status === 'unpaidLeave' || 
                           att.status === 'periodicLeave' ||
@@ -6466,6 +6641,7 @@
             const stats = {
                 full_day: attendance.filter(a => a.status === 'full_day').length,
                 partial: attendance.filter(a => a.status === 'partial').length,
+                shift: attendance.filter(a => a.status === 'shift').length,
                 absent: attendance.filter(a => a.status === 'absent').length,
                 excused: attendance.filter(a => a.status === 'excusedAbsent').length,
                 annual: attendance.filter(a => a.status === 'annualLeave').length,
@@ -6474,7 +6650,7 @@
                 mission: attendance.filter(a => a.status === 'onMission').length
             };
             
-            const totalWork = stats.full_day + stats.partial;
+            const totalWork = stats.full_day + stats.partial + stats.shift;
             const totalDays = attendance.length;
             const rate = totalDays > 0 ? Math.round((totalWork / totalDays) * 100) : 0;
             
@@ -6557,6 +6733,7 @@
                         <div class="p-2 bg-orange-50 rounded">🟠 ${t('excusedAbsent')}: ${stats.excused}</div>
                         <div class="p-2 bg-blue-50 rounded">🔵 ${t('annualLeave')}: ${stats.annual}</div>
                         <div class="p-2 bg-purple-50 rounded">🟣 ${t('sickLeave')}: ${stats.sick}</div>
+                        <div class="p-2 bg-indigo-50 rounded">🟦 ${t('shift')}: ${stats.shift}</div>
                         <div class="p-2 bg-cyan-50 rounded">🔷 ${t('onMission')}: ${stats.mission}</div>
                     </div>
                     
@@ -6582,9 +6759,12 @@
                                         numericValue = 1; // حضور كامل = 1
                                     } else if (att.status === 'partial') {
                                         numericValue = att.partialDetails?.remainderExcused === true ? 1 : getPartialEquivalentDays(att);
+                                    } else if (att.status === 'shift') {
+                                        numericValue = att.shiftDetails?.remainderExcused === true ? 1 : getShiftEquivalentDays(att);
+                                    } else if (att.status === 'sickLeave') {
+                                        numericValue = att.sickLeaveExcused === false ? 0 : 1; // حسب اختيار المستخدم
                                     } else if (att.status === 'excusedAbsent' || 
                                               att.status === 'annualLeave' || 
-                                              att.status === 'sickLeave' || 
                                               att.status === 'emergencyLeave' || 
                                               att.status === 'unpaidLeave' || 
                                               att.status === 'periodicLeave' ||
@@ -6630,6 +6810,125 @@
             
         } catch (error) {
             console.error('Error generating employee report:', error);
+            resultsContainer.innerHTML = `<p class="text-red-500 text-center py-8">${t('error')}</p>`;
+        }
+    }
+    
+    async function generateDailyWagesReport() {
+        const projectId = document.getElementById('report-wages-project')?.value;
+        const fromDate = document.getElementById('report-wages-from')?.value;
+        const toDate = document.getElementById('report-wages-to')?.value;
+        const resultsContainer = document.getElementById('report-results');
+        if (!resultsContainer) return;
+        
+        resultsContainer.innerHTML = `<div class="text-center py-8"><div class="loader mx-auto"></div></div>`;
+        
+        try {
+            const showAllProjects = projectId === 'all';
+            const projects = showAllProjects ? (window.projectsListData || []) : [window.projectsListData?.find(p => p.id === projectId)].filter(Boolean);
+            if (projects.length === 0) {
+                resultsContainer.innerHTML = `<p class="text-red-500 text-center py-8">${currentLanguage === 'ar' ? 'لا توجد مشاريع' : 'No projects found'}</p>`;
+                return;
+            }
+            
+            let allEmployees = [];
+            let allAttendance = {};
+            for (const project of projects) {
+                const empSnap = await db.collection('employees').where('projectId', '==', project.id).get();
+                empSnap.forEach(doc => {
+                    const data = doc.data();
+                    if (data.status !== 'hidden' && data.type === 'daily') allEmployees.push({ id: doc.id, ...data });
+                });
+                const fromNorm = toYyyyMmDd(fromDate) || fromDate;
+                const toNorm = toYyyyMmDd(toDate) || toDate;
+                const attSnap = await db.collection('attendance').where('projectId', '==', project.id).get();
+                attSnap.forEach(doc => {
+                    const data = doc.data();
+                    const dateStr = toYyyyMmDd(data.date);
+                    if (dateStr && dateStr >= fromNorm && dateStr <= toNorm) {
+                        if (!allAttendance[data.employeeId]) allAttendance[data.employeeId] = [];
+                        allAttendance[data.employeeId].push({ ...data, date: dateStr });
+                    }
+                });
+            }
+            
+            const fromDateObj = new Date(fromDate);
+            const reportMonth = fromDateObj.getMonth() + 1;
+            const reportYear = fromDateObj.getFullYear();
+            
+            const rows = allEmployees.map(emp => {
+                const empAtt = allAttendance[emp.id] || [];
+                let totalApprovedNumericDays = 0;
+                empAtt.forEach(att => {
+                    if (att.approved !== true) return;
+                    let dayValue = 0;
+                    if (att.status === 'full_day') dayValue = 1;
+                    else if (att.status === 'partial') dayValue = att.partialDetails?.remainderExcused === true ? 1 : getPartialEquivalentDays(att);
+                    else if (att.status === 'shift') dayValue = att.shiftDetails?.remainderExcused === true ? 1 : getShiftEquivalentDays(att);
+                    else if (att.status === 'sickLeave') dayValue = att.sickLeaveExcused === false ? 0 : 1;
+                    else if (['excusedAbsent','annualLeave','emergencyLeave','unpaidLeave','periodicLeave','officialHoliday','onMission'].includes(att.status)) dayValue = 1;
+                    else if (att.status === 'absent') dayValue = 0;
+                    totalApprovedNumericDays += dayValue;
+                });
+                const wageHistory = emp.wageHistory || [];
+                const monthWage = wageHistory.find(w => w.month === reportMonth && w.year === reportYear);
+                const dailyWage = monthWage ? monthWage.wage : (emp.dailyWage || 0);
+                const totalWage = dailyWage * totalApprovedNumericDays;
+                const project = projects.find(p => p.id === emp.projectId);
+                return { ...emp, projectName: project?.name || '-', approvedDays: totalApprovedNumericDays, dailyWage, totalWage };
+            });
+            
+            rows.sort((a, b) => (a.projectName || '').localeCompare(b.projectName || '') || (a.name || '').localeCompare(b.name || ''));
+            const grandTotal = rows.reduce((sum, r) => sum + r.totalWage, 0);
+            
+            const projectTitle = showAllProjects ? (currentLanguage === 'ar' ? 'جميع المشاريع' : 'All Projects') : (projects[0]?.name || '');
+            resultsContainer.innerHTML = `
+                <div class="card p-6">
+                    <div class="flex items-center justify-between mb-6 flex-wrap gap-4">
+                        <div>
+                            <h3 class="font-bold text-xl">${t('dailyWagesReport')}</h3>
+                            <p class="text-gray-500">${projectTitle} | ${fromDate} - ${toDate}</p>
+                        </div>
+                        <button onclick="printReportInNewTab()" class="no-print px-4 py-2 border rounded-lg hover:bg-gray-100">🖨️ ${t('print')}</button>
+                    </div>
+                    <p class="text-sm text-gray-600 mb-4">${currentLanguage === 'ar' ? 'الدوام: أيام العمل المعتمدة. الأجر اليومي: المعدل للفترة. الأجر الكلي: الأجر اليومي × الأيام المعتمدة.' : 'Attendance: approved work days. Daily wage: rate for period. Total wage: daily wage × approved days.'}</p>
+                    ${rows.length === 0 ? `<p class="text-gray-500 text-center py-8">${currentLanguage === 'ar' ? 'لا يوجد موظفون يوميون في المشروع/الفترة المحددة' : 'No daily employees in the selected project/period'}</p>` : `
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-2 py-2 text-right">${t('employeeCode')}</th>
+                                    <th class="px-2 py-2 text-right">${t('employeeName')}</th>
+                                    <th class="px-2 py-2 text-right">${t('projects')}</th>
+                                    <th class="px-2 py-2 text-center">${t('approvedDays')}</th>
+                                    <th class="px-2 py-2 text-center">${t('currentDailyWage')} (IQD)</th>
+                                    <th class="px-2 py-2 text-center">${t('totalWage')} (IQD)</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y">
+                                ${rows.map(r => `
+                                    <tr class="hover:bg-gray-50">
+                                        <td class="px-2 py-2 font-mono">${r.code}</td>
+                                        <td class="px-2 py-2 font-medium">${r.name}</td>
+                                        <td class="px-2 py-2">${r.projectName}</td>
+                                        <td class="px-2 py-2 text-center">${r.approvedDays.toFixed(2)}</td>
+                                        <td class="px-2 py-2 text-center">${r.dailyWage.toFixed(2)}</td>
+                                        <td class="px-2 py-2 text-center font-bold text-green-700">${r.totalWage.toFixed(2)}</td>
+                                    </tr>
+                                `).join('')}
+                                <tr class="bg-gray-100 font-bold">
+                                    <td class="px-2 py-2" colspan="5">${currentLanguage === 'ar' ? 'الإجمالي' : 'Total'}</td>
+                                    <td class="px-2 py-2 text-center text-green-700">${grandTotal.toFixed(2)}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    `}
+                </div>
+            `;
+            window._lastReportHtml = resultsContainer.innerHTML;
+        } catch (error) {
+            console.error('Error generating daily wages report:', error);
             resultsContainer.innerHTML = `<p class="text-red-500 text-center py-8">${t('error')}</p>`;
         }
     }
@@ -7333,6 +7632,12 @@
             reportsTitle: 'التقارير',
             reportProject: 'تقرير المشروع: يلخص الحضور لجميع الموظفين/الآليات في مشروع (أو كل المشاريع للمدير) لفترة معينة؛ يعرض المؤجور وغير المؤجور والأيام المعادلة للجزئي. الدوام الجزئي يُحتسب حسب اختيار "فرق الدوام مؤجور" في كل سجل.',
             reportEmployee: 'تقرير الموظف: يعرض سجل حضور موظف واحد لفترة؛ القيمة الرقمية لكل يوم (1 أو الأيام المعادلة للجزئي) وتأثيرها على الراتب للموظفين اليوميين.',
+            excusedTitle: 'احتساب الحضور المؤجور وغير المؤجور',
+            excusedIntro: 'في التقارير يُحسب لكل موظف (في الفترة المختارة):',
+            excusedDaysInPeriod: 'أيام الفترة: عدد أيام التقويم من تاريخ "من" إلى تاريخ "إلى" (شامل).',
+            excusedFormula: 'الحضور المؤجور = أيام الحضور الكامل + الأيام المعادلة من الدوام الجزئي + إجازة سنوية + إجازة دورية + عطلة رسمية + في مهمة.',
+            excusedPartial: 'الدوام الجزئي: إذا تم تحديد "اعتبار فرق الدوام: مؤجور" في سجل ذلك اليوم يُحتسب اليوم كاملاً (1). إذا لم يُحدد يُحتسب فقط الأيام المعادلة حسب ساعات العمل الفعلية (اليوم الكامل = 8 ساعات).',
+            excusedUnexcused: 'الحضور غير المؤجور = أيام الفترة − الحضور المؤجور (بحيث المؤجور + غير المؤجور = أيام الفترة دائماً).',
             tipsTitle: 'نصائح',
             tipLang: 'يمكن تغيير اللغة من الإعدادات. التاريخ المعتمد في النظام ميلادي بتنسيق يوم-شهر-سنة.',
             tipPrint: 'التقارير قابلة للطباعة من واجهة التقرير نفسه.',
@@ -7368,6 +7673,12 @@
             reportsTitle: 'Reports',
             reportProject: 'Project report: Summarizes attendance for all employees/vehicles in a project (or all projects for manager) for a date range; shows excused, unexcused, partial equivalent days. Partial is calculated per record using the "remainder excused" option.',
             reportEmployee: 'Employee report: Shows one employee\'s attendance for a period; numeric value per day (1 or partial equivalent) and effect on salary for daily employees.',
+            excusedTitle: 'How Excused and Unexcused Attendance Are Calculated',
+            excusedIntro: 'For each employee in the selected period, the report calculates:',
+            excusedDaysInPeriod: 'Days in period: number of calendar days from "From" to "To" date (inclusive).',
+            excusedFormula: 'Excused attendance = full attendance days + equivalent days from partial attendance + annual leave + periodic leave + official holiday + on mission.',
+            excusedPartial: 'Partial attendance: If "Remainder excused (time allowance)" was checked for that day, the day counts as 1. If not, only equivalent days are counted based on actual work hours (full day = 8 hours).',
+            excusedUnexcused: 'Unexcused attendance = days in period − excused attendance (so excused + unexcused = days in period always).',
             tipsTitle: 'Tips',
             tipLang: 'Change language in Settings. The system uses Gregorian date in day-month-year format.',
             tipPrint: 'Reports can be printed from the report screen.',
@@ -7434,6 +7745,17 @@
                             <ul class="list-disc list-inside space-y-2 pl-2">
                                 <li>${content.reportProject}</li>
                                 <li>${content.reportEmployee}</li>
+                            </ul>
+                        </section>
+                        
+                        <section>
+                            <h3 class="text-lg font-bold text-gray-800 mb-2">${content.excusedTitle}</h3>
+                            <p class="mb-2 leading-relaxed">${content.excusedIntro}</p>
+                            <ul class="list-disc list-inside space-y-2 pl-2">
+                                <li>${content.excusedDaysInPeriod}</li>
+                                <li>${content.excusedFormula}</li>
+                                <li>${content.excusedPartial}</li>
+                                <li>${content.excusedUnexcused}</li>
                             </ul>
                         </section>
                         
