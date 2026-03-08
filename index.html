@@ -1068,7 +1068,8 @@
             vehicleCalculationType: "نوع احتساب الآلية",
             vehicleDailyWage: "الأجر اليومي للآلية",
             vehicleMonthlyWage: "الأجر الشهري للآلية",
-            vehicleWagesReport: "تقرير أجور الآليات"
+            vehicleWagesReport: "تقرير أجور الآليات",
+            includeInactiveInReport: "إظهار غير النشطين في التقرير"
         },
         en: {
             // Menus
@@ -1410,7 +1411,8 @@
             vehicleCalculationType: "Vehicle Calculation Type",
             vehicleDailyWage: "Vehicle Daily Wage",
             vehicleMonthlyWage: "Vehicle Monthly Wage",
-            vehicleWagesReport: "Vehicle Wages Report"
+            vehicleWagesReport: "Vehicle Wages Report",
+            includeInactiveInReport: "Include inactive in report"
         }
     };
 
@@ -4491,6 +4493,7 @@
         vehicle: [
             { key: 'worked', icon: '🟢', color: 'bg-green-500' },
             { key: 'workedPartial', icon: '🟡', color: 'bg-yellow-500' },
+            { key: 'shift', icon: '🟦', color: 'bg-indigo-500' },
             { key: 'broken', icon: '🔴', color: 'bg-red-500' },
             { key: 'maintenance', icon: '🟠', color: 'bg-orange-500' },
             { key: 'idle', icon: '⚪', color: 'bg-gray-400' },
@@ -5109,8 +5112,8 @@
                     </div>
                 </div>
                 
-                <!-- تفاصيل الشفت (للموظفين اليوميين فقط) -->
-                <div id="shift-details-section" class="${type !== 'daily' || currentStatus !== 'shift' ? 'hidden' : ''} p-4 bg-indigo-50 rounded-lg border border-indigo-200 space-y-4">
+                <!-- تفاصيل الشفت (للموظفين اليوميين والآليات) -->
+                <div id="shift-details-section" class="${(type !== 'daily' && type !== 'vehicles') || currentStatus !== 'shift' ? 'hidden' : ''} p-4 bg-indigo-50 rounded-lg border border-indigo-200 space-y-4">
                     <p class="font-bold text-sm text-indigo-800">🟦 ${t('shiftDetails')}</p>
                     <div id="shift-rows" class="space-y-2">
                         ${shiftDetailsList && shiftDetailsList.length ? shiftDetailsList.map((sd, index) => `
@@ -5233,10 +5236,11 @@
             partialSection.classList.toggle('hidden', status !== 'partial');
         }
         
-        // إظهار/إخفاء تفاصيل الشفت (للموظفين اليوميين فقط)
+        // إظهار/إخفاء تفاصيل الشفت (للموظفين اليوميين والآليات)
         const shiftSection = document.getElementById('shift-details-section');
         if (shiftSection) {
-            shiftSection.classList.toggle('hidden', status !== 'shift' || window.currentAttendanceData.type !== 'daily');
+            const showShift = (window.currentAttendanceData.type === 'daily' || window.currentAttendanceData.type === 'vehicles') && status === 'shift';
+            shiftSection.classList.toggle('hidden', !showShift);
         }
         
         // إظهار/إخفاء تفاصيل المهمة
@@ -5305,8 +5309,8 @@
             attendanceRecord.partialDetails = partialDetails;
         }
         
-        // إضافة تفاصيل الشفت إذا كانت الحالة شفت (للموظفين اليوميين فقط)
-        if (status === 'shift' && data.type === 'daily') {
+        // إضافة تفاصيل الشفت إذا كانت الحالة شفت (للموظفين اليوميين والآليات)
+        if (status === 'shift' && (data.type === 'daily' || data.type === 'vehicles')) {
             const shiftRows = document.querySelectorAll('.shift-row');
             const shiftDetailsList = [];
             shiftRows.forEach(row => {
@@ -5380,8 +5384,9 @@
         window.currentAttendanceData = { itemId, dateStr, type, selectedStatus: status };
         selectAttendanceStatus(status);
         
-        // إذا لم يكن جزئي أو شفت أو مهمة، احفظ مباشرة
-        if ((status !== 'partial' && status !== 'shift' && status !== 'onMission') || type === 'vehicles') {
+        // إذا لم يكن جزئي أو شفت أو مهمة، احفظ مباشرة (الآليات تحتاج تفاصيل الشفت عند اختيار شفت)
+        const needDetails = (type === 'daily' && (status === 'partial' || status === 'shift' || status === 'onMission')) || (type === 'vehicles' && status === 'shift');
+        if (!needDetails) {
             saveCurrentAttendance();
         }
     }
@@ -6068,6 +6073,10 @@
                                     <input type="date" id="report-project-to" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500" value="${reportProjectDefaultTo}">
                                 </div>
                             </div>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" id="report-project-include-inactive" class="rounded text-primary-600">
+                                <span class="text-sm text-gray-700">${t('includeInactiveInReport')}</span>
+                            </label>
                             <button onclick="generateProjectReport()" class="w-full py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">
                                 ${t('view')} ${t('projectReport')}
                             </button>
@@ -6128,6 +6137,10 @@
                                     <input type="date" id="report-wages-to" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500" value="${reportProjectDefaultTo}">
                                 </div>
                             </div>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" id="report-wages-include-inactive" class="rounded text-primary-600">
+                                <span class="text-sm text-gray-700">${t('includeInactiveInReport')}</span>
+                            </label>
                             <button onclick="generateDailyWagesReport()" class="w-full py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">
                                 ${t('view')} ${t('dailyWagesReport')}
                             </button>
@@ -6158,6 +6171,10 @@
                                     <input type="date" id="report-vehicle-wages-to" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500" value="${reportProjectDefaultTo}">
                                 </div>
                             </div>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" id="report-vehicle-wages-include-inactive" class="rounded text-primary-600">
+                                <span class="text-sm text-gray-700">${t('includeInactiveInReport')}</span>
+                            </label>
                             <button onclick="generateVehicleWagesReport()" class="w-full py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">
                                 ${t('view')} ${t('vehicleWagesReport')}
                             </button>
@@ -6304,6 +6321,7 @@
         const fromDate = document.getElementById('report-project-from').value;
         const toDate = document.getElementById('report-project-to').value;
         const employeeTypeFilter = document.getElementById('report-project-type')?.value || 'all';
+        const includeInactive = document.getElementById('report-project-include-inactive')?.checked === true;
         const resultsContainer = document.getElementById('report-results');
         
         resultsContainer.innerHTML = `<div class="text-center py-8"><div class="loader mx-auto"></div></div>`;
@@ -6355,6 +6373,15 @@
                         allVehicleAttendance[data.vehicleId].push({ ...data, date: dateStr });
                     }
                 });
+            }
+            
+            // إخفاء غير النشطين إذا لم يُختر خيار إظهارهم
+            if (!includeInactive) {
+                allEmployees = allEmployees.filter(e => e.status === 'active');
+                allVehicles = allVehicles.filter(v => v.status === 'active');
+            } else {
+                allEmployees = allEmployees.filter(e => e.status !== 'hidden');
+                allVehicles = allVehicles.filter(v => v.status !== 'hidden');
             }
             
             // فلترة الموظفين حسب النوع
@@ -6466,6 +6493,9 @@
                 const vehAtt = vehicleAttendance[veh.id] || [];
                 const worked = vehAtt.filter(a => a.status === 'worked').length;
                 const workedPartial = vehAtt.filter(a => a.status === 'workedPartial').length;
+                const shiftRecords = vehAtt.filter(a => a.status === 'shift');
+                const shiftCount = shiftRecords.length;
+                const shiftEquivalentDays = shiftRecords.reduce((sum, r) => sum + getShiftEquivalentDays(r), 0);
                 const broken = vehAtt.filter(a => a.status === 'broken').length;
                 const maintenance = vehAtt.filter(a => a.status === 'maintenance').length;
                 const idle = vehAtt.filter(a => a.status === 'idle').length;
@@ -6477,6 +6507,8 @@
                     ...veh,
                     worked,
                     workedPartial,
+                    shiftCount,
+                    shiftEquivalentDays,
                     broken,
                     maintenance,
                     idle,
@@ -6489,12 +6521,14 @@
             const vehicleTotals = vehicleStats.reduce((acc, v) => ({
                 worked: acc.worked + v.worked,
                 workedPartial: acc.workedPartial + v.workedPartial,
+                shiftCount: (acc.shiftCount || 0) + (v.shiftCount || 0),
+                shiftEquivalentDays: (acc.shiftEquivalentDays || 0) + (v.shiftEquivalentDays || 0),
                 broken: acc.broken + v.broken,
                 maintenance: acc.maintenance + v.maintenance,
                 idle: acc.idle + v.idle,
                 approvedRecords: acc.approvedRecords + v.approvedCount,
                 unapprovedRecords: acc.unapprovedRecords + v.unapprovedCount
-            }), { worked: 0, workedPartial: 0, broken: 0, maintenance: 0, idle: 0, approvedRecords: 0, unapprovedRecords: 0 });
+            }), { worked: 0, workedPartial: 0, shiftCount: 0, shiftEquivalentDays: 0, broken: 0, maintenance: 0, idle: 0, approvedRecords: 0, unapprovedRecords: 0 });
             
             const showVehiclesOnly = employeeTypeFilter === 'vehicles';
             
@@ -6531,6 +6565,10 @@
                         <div class="bg-yellow-50 p-4 rounded-lg text-center">
                             <p class="text-2xl font-bold text-yellow-700">${vehicleTotals.workedPartial}</p>
                             <p class="text-sm text-gray-500">🟡 ${t('workedPartial')}</p>
+                        </div>
+                        <div class="bg-indigo-50 p-4 rounded-lg text-center">
+                            <p class="text-2xl font-bold text-indigo-600">${(vehicleTotals.shiftEquivalentDays || 0).toFixed(2)}</p>
+                            <p class="text-sm text-gray-500">🟦 ${t('shift')}</p>
                         </div>
                         <div class="bg-emerald-50 p-4 rounded-lg text-center">
                             <p class="text-2xl font-bold text-emerald-600">${vehicleTotals.approvedRecords}</p>
@@ -6657,6 +6695,7 @@
                                     <th class="px-2 py-2 text-right">${t('vehicleType')}</th>
                                     <th class="px-2 py-2 text-center">🟢 ${t('worked')}</th>
                                     <th class="px-2 py-2 text-center">🟡 ${t('workedPartial')}</th>
+                                    <th class="px-2 py-2 text-center">🟦 ${t('shift')}</th>
                                     <th class="px-2 py-2 text-center">🔴 ${t('broken')}</th>
                                     <th class="px-2 py-2 text-center">🟠 ${t('maintenance')}</th>
                                     <th class="px-2 py-2 text-center">⚪ ${t('idle')}</th>
@@ -6673,6 +6712,7 @@
                                         <td class="px-2 py-2">${t(veh.type)}</td>
                                         <td class="px-2 py-2 text-center text-green-600">${veh.worked}</td>
                                         <td class="px-2 py-2 text-center text-yellow-600">${veh.workedPartial}</td>
+                                        <td class="px-2 py-2 text-center text-indigo-600">${veh.shiftCount || 0} (${(veh.shiftEquivalentDays || 0).toFixed(2)})</td>
                                         <td class="px-2 py-2 text-center text-red-600">${veh.broken}</td>
                                         <td class="px-2 py-2 text-center text-orange-600">${veh.maintenance}</td>
                                         <td class="px-2 py-2 text-center text-gray-600">${veh.idle}</td>
@@ -6951,6 +6991,7 @@
         const projectId = document.getElementById('report-wages-project')?.value;
         const fromDate = document.getElementById('report-wages-from')?.value;
         const toDate = document.getElementById('report-wages-to')?.value;
+        const includeInactive = document.getElementById('report-wages-include-inactive')?.checked === true;
         const resultsContainer = document.getElementById('report-results');
         if (!resultsContainer) return;
         
@@ -6983,6 +7024,10 @@
                         allAttendance[data.employeeId].push({ ...data, date: dateStr });
                     }
                 });
+            }
+            
+            if (!includeInactive) {
+                allEmployees = allEmployees.filter(e => e.status === 'active');
             }
             
             const fromDateObj = new Date(fromDate);
@@ -7070,6 +7115,7 @@
         const projectId = document.getElementById('report-vehicle-wages-project')?.value;
         const fromDate = document.getElementById('report-vehicle-wages-from')?.value;
         const toDate = document.getElementById('report-vehicle-wages-to')?.value;
+        const includeInactive = document.getElementById('report-vehicle-wages-include-inactive')?.checked === true;
         const resultsContainer = document.getElementById('report-results');
         if (!resultsContainer) return;
 
@@ -7107,6 +7153,12 @@
                 });
             }
 
+            if (!includeInactive) {
+                allVehicles = allVehicles.filter(v => v.status === 'active');
+            } else {
+                allVehicles = allVehicles.filter(v => v.status !== 'hidden');
+            }
+
             if (allVehicles.length === 0) {
                 resultsContainer.innerHTML = `<p class="text-gray-500 text-center py-8">${currentLanguage === 'ar' ? 'لا توجد آليات في المشاريع المحددة' : 'No vehicles in the selected projects'}</p>`;
                 return;
@@ -7125,6 +7177,7 @@
                     if (att.approved !== true) return;
                     if (att.status === 'worked') approvedWorkedDays += 1;
                     else if (att.status === 'workedPartial') approvedWorkedDays += 0.5;
+                    else if (att.status === 'shift') approvedWorkedDays += getShiftEquivalentDays(att);
                 });
 
                 const calcType = veh.calculationType || 'daily';
