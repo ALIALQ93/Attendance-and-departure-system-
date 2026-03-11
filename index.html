@@ -6141,6 +6141,10 @@
                                 <input type="checkbox" id="report-wages-include-inactive" class="rounded text-primary-600">
                                 <span class="text-sm text-gray-700">${t('includeInactiveInReport')}</span>
                             </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" id="report-wages-hide-zero-wage" class="rounded text-primary-600">
+                                <span class="text-sm text-gray-700">${currentLanguage === 'ar' ? 'إخفاء من لا يملكون أجر' : 'Hide items with zero wage'}</span>
+                            </label>
                             <button onclick="generateDailyWagesReport()" class="w-full py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">
                                 ${t('view')} ${t('dailyWagesReport')}
                             </button>
@@ -6174,6 +6178,10 @@
                             <label class="flex items-center gap-2 cursor-pointer">
                                 <input type="checkbox" id="report-vehicle-wages-include-inactive" class="rounded text-primary-600">
                                 <span class="text-sm text-gray-700">${t('includeInactiveInReport')}</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" id="report-vehicle-wages-hide-zero-wage" class="rounded text-primary-600">
+                                <span class="text-sm text-gray-700">${currentLanguage === 'ar' ? 'إخفاء من لا يملكون أجر' : 'Hide items with zero wage'}</span>
                             </label>
                             <button onclick="generateVehicleWagesReport()" class="w-full py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">
                                 ${t('view')} ${t('vehicleWagesReport')}
@@ -6992,6 +7000,7 @@
         const fromDate = document.getElementById('report-wages-from')?.value;
         const toDate = document.getElementById('report-wages-to')?.value;
         const includeInactive = document.getElementById('report-wages-include-inactive')?.checked === true;
+        const hideZeroWage = document.getElementById('report-wages-hide-zero-wage')?.checked === true;
         const resultsContainer = document.getElementById('report-results');
         if (!resultsContainer) return;
         
@@ -7034,30 +7043,62 @@
             const reportMonth = fromDateObj.getMonth() + 1;
             const reportYear = fromDateObj.getFullYear();
             
-            const rows = allEmployees.map(emp => {
+            let rows = allEmployees.map(emp => {
                 const empAtt = allAttendance[emp.id] || [];
-                let totalApprovedNumericDays = 0;
+                
+                let totalNumericDays = 0;          // كل الأيام المؤجورة (معتمدة + غير معتمدة)
+                let totalApprovedNumericDays = 0;  // الأيام المؤجورة المعتمدة فقط
+                
                 empAtt.forEach(att => {
-                    if (att.approved !== true) return;
                     let dayValue = 0;
-                    if (att.status === 'full_day') dayValue = 1;
-                    else if (att.status === 'partial') dayValue = att.partialDetails?.remainderExcused === true ? 1 : getPartialEquivalentDays(att);
-                    else if (att.status === 'shift') dayValue = getShiftEquivalentDays(att);
-                    else if (att.status === 'sickLeave') dayValue = att.sickLeaveExcused === false ? 0 : 1;
-                    else if (['excusedAbsent','annualLeave','emergencyLeave','unpaidLeave','periodicLeave','officialHoliday','onMission'].includes(att.status)) dayValue = 1;
-                    else if (att.status === 'absent') dayValue = 0;
-                    totalApprovedNumericDays += dayValue;
+                    if (att.status === 'full_day') {
+                        dayValue = 1;
+                    } else if (att.status === 'partial') {
+                        dayValue = att.partialDetails?.remainderExcused === true ? 1 : getPartialEquivalentDays(att);
+                    } else if (att.status === 'shift') {
+                        dayValue = getShiftEquivalentDays(att);
+                    } else if (att.status === 'sickLeave') {
+                        dayValue = att.sickLeaveExcused === false ? 0 : 1;
+                    } else if (['excusedAbsent','annualLeave','emergencyLeave','unpaidLeave','periodicLeave','officialHoliday','onMission'].includes(att.status)) {
+                        dayValue = 1;
+                    } else if (att.status === 'absent') {
+                        dayValue = 0;
+                    }
+                    totalNumericDays += dayValue;
+                    if (att.approved === true) {
+                        totalApprovedNumericDays += dayValue;
+                    }
                 });
+                
                 const wageHistory = emp.wageHistory || [];
                 const monthWage = wageHistory.find(w => w.month === reportMonth && w.year === reportYear);
                 const dailyWage = monthWage ? monthWage.wage : (emp.dailyWage || 0);
-                const totalWage = dailyWage * totalApprovedNumericDays;
+                
+                const approvedWage = dailyWage * totalApprovedNumericDays;
+                const potentialWage = dailyWage * totalNumericDays;
+                
                 const project = projects.find(p => p.id === emp.projectId);
-                return { ...emp, projectName: project?.name || '-', approvedDays: totalApprovedNumericDays, dailyWage, totalWage };
+                return {
+                    ...emp,
+                    projectName: project?.name || '-',
+                    totalNumericDays,
+                    approvedDays: totalApprovedNumericDays,
+                    dailyWage,
+                    approvedWage,
+                    potentialWage
+                };
             });
             
+            if (hideZeroWage) {
+                rows = rows.filter(r =>
+                    r.dailyWage > 0 &&
+                    (r.approvedWage > 0 || r.potentialWage > 0)
+                );
+            }
+            
             rows.sort((a, b) => (a.projectName || '').localeCompare(b.projectName || '') || (a.name || '').localeCompare(b.name || ''));
-            const grandTotal = rows.reduce((sum, r) => sum + r.totalWage, 0);
+            const grandApprovedTotal = rows.reduce((sum, r) => sum + r.approvedWage, 0);
+            const grandPotentialTotal = rows.reduce((sum, r) => sum + r.potentialWage, 0);
             
             const projectTitle = showAllProjects ? (currentLanguage === 'ar' ? 'جميع المشاريع' : 'All Projects') : (projects[0]?.name || '');
             resultsContainer.innerHTML = `
@@ -7069,7 +7110,11 @@
                         </div>
                         <button onclick="printReportInNewTab()" class="no-print px-4 py-2 border rounded-lg hover:bg-gray-100">🖨️ ${t('print')}</button>
                     </div>
-                    <p class="text-sm text-gray-600 mb-4">${currentLanguage === 'ar' ? 'الدوام: أيام العمل المعتمدة. الأجر اليومي: المعدل للفترة. الأجر الكلي: الأجر اليومي × الأيام المعتمدة.' : 'Attendance: approved work days. Daily wage: rate for period. Total wage: daily wage × approved days.'}</p>
+                    <p class="text-sm text-gray-600 mb-4">
+                        ${currentLanguage === 'ar'
+                            ? 'الأجر المعتمد = الأجر اليومي × الأيام المؤجورة المعتمدة. الأجر المحتمل = الأجر اليومي × جميع الأيام المؤجورة (معتمدة وغير معتمدة).'
+                            : 'Approved wage = daily wage × approved paid days. Potential wage = daily wage × all paid days (approved and unapproved).'}
+                    </p>
                     ${rows.length === 0 ? `<p class="text-gray-500 text-center py-8">${currentLanguage === 'ar' ? 'لا يوجد موظفون يوميون في المشروع/الفترة المحددة' : 'No daily employees in the selected project/period'}</p>` : `
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm">
@@ -7078,9 +7123,11 @@
                                     <th class="px-2 py-2 text-right">${t('employeeCode')}</th>
                                     <th class="px-2 py-2 text-right">${t('employeeName')}</th>
                                     <th class="px-2 py-2 text-right">${t('projects')}</th>
-                                    <th class="px-2 py-2 text-center">${t('approvedDays')}</th>
+                                    <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أيام مؤجورة (معتمدة)' : 'Approved paid days'}</th>
+                                    <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أيام مؤجورة (الكل)' : 'All paid days'}</th>
                                     <th class="px-2 py-2 text-center">${t('currentDailyWage')} (IQD)</th>
-                                    <th class="px-2 py-2 text-center">${t('totalWage')} (IQD)</th>
+                                    <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أجر معتمد' : 'Approved wage'} (IQD)</th>
+                                    <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أجر محتمل' : 'Potential wage'} (IQD)</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y">
@@ -7090,13 +7137,20 @@
                                         <td class="px-2 py-2 font-medium">${r.name}</td>
                                         <td class="px-2 py-2">${r.projectName}</td>
                                         <td class="px-2 py-2 text-center">${r.approvedDays.toFixed(2)}</td>
+                                        <td class="px-2 py-2 text-center">${r.totalNumericDays.toFixed(2)}</td>
                                         <td class="px-2 py-2 text-center">${r.dailyWage.toFixed(2)}</td>
-                                        <td class="px-2 py-2 text-center font-bold text-green-700">${r.totalWage.toFixed(2)}</td>
+                                        <td class="px-2 py-2 text-center font-bold text-green-700">${r.approvedWage.toFixed(2)}</td>
+                                        <td class="px-2 py-2 text-center font-bold text-blue-700">${r.potentialWage.toFixed(2)}</td>
                                     </tr>
                                 `).join('')}
                                 <tr class="bg-gray-100 font-bold">
-                                    <td class="px-2 py-2" colspan="5">${currentLanguage === 'ar' ? 'الإجمالي' : 'Total'}</td>
-                                    <td class="px-2 py-2 text-center text-green-700">${grandTotal.toFixed(2)}</td>
+                                    <td class="px-2 py-2" colspan="6">${currentLanguage === 'ar' ? 'الإجمالي (معتمد)' : 'Approved total'}</td>
+                                    <td class="px-2 py-2 text-center text-green-700">${grandApprovedTotal.toFixed(2)}</td>
+                                    <td class="px-2 py-2"></td>
+                                </tr>
+                                <tr class="bg-gray-50 font-bold">
+                                    <td class="px-2 py-2" colspan="7">${currentLanguage === 'ar' ? 'الإجمالي (محتمل)' : 'Potential total'}</td>
+                                    <td class="px-2 py-2 text-center text-blue-700">${grandPotentialTotal.toFixed(2)}</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -7116,6 +7170,7 @@
         const fromDate = document.getElementById('report-vehicle-wages-from')?.value;
         const toDate = document.getElementById('report-vehicle-wages-to')?.value;
         const includeInactive = document.getElementById('report-vehicle-wages-include-inactive')?.checked === true;
+        const hideZeroWage = document.getElementById('report-vehicle-wages-hide-zero-wage')?.checked === true;
         const resultsContainer = document.getElementById('report-results');
         if (!resultsContainer) return;
 
@@ -7170,42 +7225,67 @@
             const toD = new Date(toParts[0], toParts[1] - 1, toParts[2]);
             const daysInPeriod = Math.max(1, Math.round((toD - fromD) / (24 * 60 * 60 * 1000)) + 1);
 
-            const rows = allVehicles.map(veh => {
+            let rows = allVehicles.map(veh => {
                 const vehAtt = allVehicleAttendance[veh.id] || [];
+                
+                let totalWorkedNumericDays = 0;
                 let approvedWorkedDays = 0;
+                
                 vehAtt.forEach(att => {
-                    if (att.approved !== true) return;
-                    if (att.status === 'worked') approvedWorkedDays += 1;
-                    else if (att.status === 'workedPartial') approvedWorkedDays += 0.5;
-                    else if (att.status === 'shift') approvedWorkedDays += getShiftEquivalentDays(att);
+                    let dayValue = 0;
+                    if (att.status === 'worked') {
+                        dayValue = 1;
+                    } else if (att.status === 'workedPartial') {
+                        dayValue = 0.5;
+                    } else if (att.status === 'shift') {
+                        dayValue = getShiftEquivalentDays(att);
+                    }
+                    totalWorkedNumericDays += dayValue;
+                    if (att.approved === true) {
+                        approvedWorkedDays += dayValue;
+                    }
                 });
 
                 const calcType = veh.calculationType || 'daily';
                 const dailyWage = calcType === 'daily' ? (veh.dailyWage || 0) : 0;
                 const monthlyWage = calcType === 'monthly' ? (veh.monthlyWage || 0) : 0;
 
-                let totalWage = 0;
+                let approvedWage = 0;
+                let potentialWage = 0;
                 if (calcType === 'daily') {
-                    totalWage = dailyWage * approvedWorkedDays;
+                    approvedWage = dailyWage * approvedWorkedDays;
+                    potentialWage = dailyWage * totalWorkedNumericDays;
                 } else {
-                    const factor = daysInPeriod > 0 ? (approvedWorkedDays / daysInPeriod) : 0;
-                    totalWage = monthlyWage * factor;
+                    const approvedFactor = daysInPeriod > 0 ? (approvedWorkedDays / daysInPeriod) : 0;
+                    const totalFactor = daysInPeriod > 0 ? (totalWorkedNumericDays / daysInPeriod) : 0;
+                    approvedWage = monthlyWage * approvedFactor;
+                    potentialWage = monthlyWage * totalFactor;
                 }
 
                 const project = projects.find(p => p.id === veh.projectId);
                 return {
                     ...veh,
                     projectName: project?.name || '-',
+                    totalWorkedNumericDays,
                     approvedWorkedDays,
                     calcType,
                     dailyWage,
                     monthlyWage,
-                    totalWage
+                    approvedWage,
+                    potentialWage
                 };
             });
 
+            if (hideZeroWage) {
+                rows = rows.filter(r => {
+                    const baseWage = r.calcType === 'daily' ? r.dailyWage : r.monthlyWage;
+                    return baseWage > 0 && (r.approvedWage > 0 || r.potentialWage > 0);
+                });
+            }
+            
             rows.sort((a, b) => (a.projectName || '').localeCompare(b.projectName || '') || (a.name || '').localeCompare(b.name || ''));
-            const grandTotal = rows.reduce((sum, r) => sum + r.totalWage, 0);
+            const grandApprovedTotal = rows.reduce((sum, r) => sum + r.approvedWage, 0);
+            const grandPotentialTotal = rows.reduce((sum, r) => sum + r.potentialWage, 0);
 
             const projectTitle = showAllProjects ? (currentLanguage === 'ar' ? 'جميع المشاريع' : 'All Projects') : (projects[0]?.name || '');
             resultsContainer.innerHTML = `
@@ -7219,8 +7299,8 @@
                     </div>
                     <p class="text-sm text-gray-600 mb-4">
                         ${currentLanguage === 'ar'
-                            ? 'يتم احتساب الأجر للآليات اليومية = الأجر اليومي × أيام العمل المعتمدة. للآليات الشهرية يتم توزيع الأجر الشهري بنسبة أيام العمل المعتمدة إلى عدد أيام الفترة.'
-                            : 'For daily vehicles: total wage = daily wage × approved work days. For monthly vehicles: total wage = monthly wage × (approved work days / days in period).'}
+                            ? 'الأجر المعتمد للآليات اليومية = الأجر اليومي × أيام العمل المعتمدة. الأجر المحتمل = الأجر اليومي × جميع أيام العمل (معتمدة وغير معتمدة). للآليات الشهرية يتم توزيع الأجر الشهري بنسبة أيام العمل (معتمدة/الكل) إلى عدد أيام الفترة.'
+                            : 'Approved wage for daily vehicles = daily wage × approved work days. Potential wage = daily wage × all work days. For monthly vehicles, wage is proportional to (work days / days in period) for approved and all days.'}
                     </p>
                     ${rows.length === 0 ? `<p class="text-gray-500 text-center py-8">${currentLanguage === 'ar' ? 'لا توجد آليات في الفترة المحددة' : 'No vehicles in the selected period'}</p>` : `
                     <div class="overflow-x-auto">
@@ -7231,9 +7311,11 @@
                                     <th class="px-2 py-2 text-right">${t('vehicleName')}</th>
                                     <th class="px-2 py-2 text-right">${t('projects')}</th>
                                     <th class="px-2 py-2 text-right">${t('vehicleCalculationType')}</th>
-                                    <th class="px-2 py-2 text-center">${t('approvedDays')}</th>
+                                    <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أيام عمل (معتمدة)' : 'Approved work days'}</th>
+                                    <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أيام عمل (الكل)' : 'All work days'}</th>
                                     <th class="px-2 py-2 text-center">${t('vehicleDailyWage')} / ${t('vehicleMonthlyWage')} (IQD)</th>
-                                    <th class="px-2 py-2 text-center">${t('totalWage')} (IQD)</th>
+                                    <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أجر معتمد' : 'Approved wage'} (IQD)</th>
+                                    <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أجر محتمل' : 'Potential wage'} (IQD)</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y">
@@ -7244,15 +7326,22 @@
                                         <td class="px-2 py-2">${r.projectName}</td>
                                         <td class="px-2 py-2">${t(r.calcType)}</td>
                                         <td class="px-2 py-2 text-center">${r.approvedWorkedDays.toFixed(2)}</td>
+                                        <td class="px-2 py-2 text-center">${r.totalWorkedNumericDays.toFixed(2)}</td>
                                         <td class="px-2 py-2 text-center">
                                             ${r.calcType === 'daily' ? r.dailyWage.toFixed(2) : r.monthlyWage.toFixed(2)}
                                         </td>
-                                        <td class="px-2 py-2 text-center font-bold text-green-700">${r.totalWage.toFixed(2)}</td>
+                                        <td class="px-2 py-2 text-center font-bold text-green-700">${r.approvedWage.toFixed(2)}</td>
+                                        <td class="px-2 py-2 text-center font-bold text-blue-700">${r.potentialWage.toFixed(2)}</td>
                                     </tr>
                                 `).join('')}
                                 <tr class="bg-gray-100 font-bold">
-                                    <td class="px-2 py-2" colspan="6">${currentLanguage === 'ar' ? 'الإجمالي' : 'Total'}</td>
-                                    <td class="px-2 py-2 text-center text-green-700">${grandTotal.toFixed(2)}</td>
+                                    <td class="px-2 py-2" colspan="7">${currentLanguage === 'ar' ? 'الإجمالي (معتمد)' : 'Approved total'}</td>
+                                    <td class="px-2 py-2 text-center text-green-700">${grandApprovedTotal.toFixed(2)}</td>
+                                    <td class="px-2 py-2"></td>
+                                </tr>
+                                <tr class="bg-gray-50 font-bold">
+                                    <td class="px-2 py-2" colspan="8">${currentLanguage === 'ar' ? 'الإجمالي (محتمل)' : 'Potential total'}</td>
+                                    <td class="px-2 py-2 text-center text-blue-700">${grandPotentialTotal.toFixed(2)}</td>
                                 </tr>
                             </tbody>
                         </table>
