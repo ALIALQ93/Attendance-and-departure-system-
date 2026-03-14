@@ -1466,6 +1466,19 @@
         return '';
     }
     
+    // تقريب المبلغ لأقرب 250
+    function roundToNearest250(value) {
+        if (value == null || isNaN(value)) return 0;
+        return Math.round(Number(value) / 250) * 250;
+    }
+    
+    // تنسيق الأجر: تقريب لأقرب 250 + فواصل الآلاف
+    function formatWage(value) {
+        if (value == null || isNaN(value)) return '0';
+        const rounded = roundToNearest250(Number(value));
+        return rounded.toLocaleString('en-US', { maximumFractionDigits: 0, minimumFractionDigits: 0 });
+    }
+    
     // عرض Toast
     function showToast(message, type = 'success') {
         const container = document.getElementById('toast-container');
@@ -6138,10 +6151,6 @@
                                 </div>
                             </div>
                             <label class="flex items-center gap-2 cursor-pointer">
-                                <input type="checkbox" id="report-wages-include-inactive" class="rounded text-primary-600">
-                                <span class="text-sm text-gray-700">${t('includeInactiveInReport')}</span>
-                            </label>
-                            <label class="flex items-center gap-2 cursor-pointer">
                                 <input type="checkbox" id="report-wages-hide-zero-wage" class="rounded text-primary-600">
                                 <span class="text-sm text-gray-700">${currentLanguage === 'ar' ? 'إخفاء من لا يملكون أجر' : 'Hide items with zero wage'}</span>
                             </label>
@@ -6175,10 +6184,6 @@
                                     <input type="date" id="report-vehicle-wages-to" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500" value="${reportProjectDefaultTo}">
                                 </div>
                             </div>
-                            <label class="flex items-center gap-2 cursor-pointer">
-                                <input type="checkbox" id="report-vehicle-wages-include-inactive" class="rounded text-primary-600">
-                                <span class="text-sm text-gray-700">${t('includeInactiveInReport')}</span>
-                            </label>
                             <label class="flex items-center gap-2 cursor-pointer">
                                 <input type="checkbox" id="report-vehicle-wages-hide-zero-wage" class="rounded text-primary-600">
                                 <span class="text-sm text-gray-700">${currentLanguage === 'ar' ? 'إخفاء من لا يملكون أجر' : 'Hide items with zero wage'}</span>
@@ -6850,7 +6855,7 @@
                 }
                 
                 if (dailyWage > 0) {
-                    totalSalary = dailyWage * totalApprovedNumericDays;
+                    totalSalary = roundToNearest250(dailyWage * totalApprovedNumericDays);
                 }
             }
             
@@ -6879,13 +6884,13 @@
                             <div>
                                 <p class="text-sm text-gray-600 mb-1">${t('salaryCalculation')}</p>
                                 <p class="text-sm text-gray-700">
-                                    ${t('currentDailyWage')}: <span class="font-bold">${dailyWage.toFixed(2)} ${currentLanguage === 'ar' ? 'IQD' : 'IQD'}</span>
+                                    ${t('currentDailyWage')}: <span class="font-bold">${formatWage(dailyWage)} ${currentLanguage === 'ar' ? 'IQD' : 'IQD'}</span>
                                     × ${totalApprovedNumericDays.toFixed(2)} ${currentLanguage === 'ar' ? 'يوم معتمد' : 'approved days'}
                                 </p>
                             </div>
                             <div class="text-right">
                                 <p class="text-sm text-gray-600 mb-1">${t('totalSalary')}</p>
-                                <p class="text-2xl font-bold text-blue-600">${totalSalary.toFixed(2)} ${currentLanguage === 'ar' ? 'IQD' : 'IQD'}</p>
+                                <p class="text-2xl font-bold text-blue-600">${formatWage(totalSalary)} ${currentLanguage === 'ar' ? 'IQD' : 'IQD'}</p>
                             </div>
                         </div>
                     </div>
@@ -6999,13 +7004,12 @@
         const projectId = document.getElementById('report-wages-project')?.value;
         const fromDate = document.getElementById('report-wages-from')?.value;
         const toDate = document.getElementById('report-wages-to')?.value;
-        const includeInactive = document.getElementById('report-wages-include-inactive')?.checked === true;
         const hideZeroWage = document.getElementById('report-wages-hide-zero-wage')?.checked === true;
         const resultsContainer = document.getElementById('report-results');
         if (!resultsContainer) return;
-        
+
         resultsContainer.innerHTML = `<div class="text-center py-8"><div class="loader mx-auto"></div></div>`;
-        
+
         try {
             const showAllProjects = projectId === 'all';
             const projects = showAllProjects ? (window.projectsListData || []) : [window.projectsListData?.find(p => p.id === projectId)].filter(Boolean);
@@ -7013,7 +7017,7 @@
                 resultsContainer.innerHTML = `<p class="text-red-500 text-center py-8">${currentLanguage === 'ar' ? 'لا توجد مشاريع' : 'No projects found'}</p>`;
                 return;
             }
-            
+
             let allEmployees = [];
             let allAttendance = {};
             for (const project of projects) {
@@ -7034,10 +7038,9 @@
                     }
                 });
             }
-            
-            if (!includeInactive) {
-                allEmployees = allEmployees.filter(e => e.status === 'active');
-            }
+
+            // عرض من له حضور في الفترة فقط (نشط أو متوقف)
+            allEmployees = allEmployees.filter(e => Object.prototype.hasOwnProperty.call(allAttendance, e.id) && allAttendance[e.id].length > 0);
             
             const fromDateObj = new Date(fromDate);
             const reportMonth = fromDateObj.getMonth() + 1;
@@ -7074,8 +7077,8 @@
                 const monthWage = wageHistory.find(w => w.month === reportMonth && w.year === reportYear);
                 const dailyWage = monthWage ? monthWage.wage : (emp.dailyWage || 0);
                 
-                const approvedWage = dailyWage * totalApprovedNumericDays;
-                const potentialWage = dailyWage * totalNumericDays;
+                const approvedWage = roundToNearest250(dailyWage * totalApprovedNumericDays);
+                const potentialWage = roundToNearest250(dailyWage * totalNumericDays);
                 
                 const project = projects.find(p => p.id === emp.projectId);
                 return {
@@ -7112,10 +7115,10 @@
                     </div>
                     <p class="text-sm text-gray-600 mb-4">
                         ${currentLanguage === 'ar'
-                            ? 'الأجر المعتمد = الأجر اليومي × الأيام المؤجورة المعتمدة. الأجر المحتمل = الأجر اليومي × جميع الأيام المؤجورة (معتمدة وغير معتمدة).'
-                            : 'Approved wage = daily wage × approved paid days. Potential wage = daily wage × all paid days (approved and unapproved).'}
+                            ? 'يعرض كل من سُجّل له حضور في الفترة (نشط أو متوقف). الأجر المعتمد = الأجر اليومي × الأيام المؤجورة المعتمدة. الأجر المحتمل = الأجر اليومي × جميع الأيام المؤجورة.'
+                            : 'Shows everyone with attendance in the period (active or inactive). Approved wage = daily wage × approved paid days. Potential wage = daily wage × all paid days.'}
                     </p>
-                    ${rows.length === 0 ? `<p class="text-gray-500 text-center py-8">${currentLanguage === 'ar' ? 'لا يوجد موظفون يوميون في المشروع/الفترة المحددة' : 'No daily employees in the selected project/period'}</p>` : `
+                    ${rows.length === 0 ? `<p class="text-gray-500 text-center py-8">${currentLanguage === 'ar' ? 'لا يوجد موظفون يوميون لديهم حضور في الفترة المحددة' : 'No daily employees with attendance in the selected period'}</p>` : `
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm">
                             <thead class="bg-gray-50">
@@ -7123,6 +7126,7 @@
                                     <th class="px-2 py-2 text-right">${t('employeeCode')}</th>
                                     <th class="px-2 py-2 text-right">${t('employeeName')}</th>
                                     <th class="px-2 py-2 text-right">${t('projects')}</th>
+                                    <th class="px-2 py-2 text-center">${t('status')}</th>
                                     <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أيام مؤجورة (معتمدة)' : 'Approved paid days'}</th>
                                     <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أيام مؤجورة (الكل)' : 'All paid days'}</th>
                                     <th class="px-2 py-2 text-center">${t('currentDailyWage')} (IQD)</th>
@@ -7136,21 +7140,22 @@
                                         <td class="px-2 py-2 font-mono">${r.code}</td>
                                         <td class="px-2 py-2 font-medium">${r.name}</td>
                                         <td class="px-2 py-2">${r.projectName}</td>
+                                        <td class="px-2 py-2 text-center"><span class="px-2 py-0.5 text-xs rounded-full ${r.status === 'active' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600'}">${t(r.status || 'active')}</span></td>
                                         <td class="px-2 py-2 text-center">${r.approvedDays.toFixed(2)}</td>
                                         <td class="px-2 py-2 text-center">${r.totalNumericDays.toFixed(2)}</td>
-                                        <td class="px-2 py-2 text-center">${r.dailyWage.toFixed(2)}</td>
-                                        <td class="px-2 py-2 text-center font-bold text-green-700">${r.approvedWage.toFixed(2)}</td>
-                                        <td class="px-2 py-2 text-center font-bold text-blue-700">${r.potentialWage.toFixed(2)}</td>
+                                        <td class="px-2 py-2 text-center">${formatWage(r.dailyWage)}</td>
+                                        <td class="px-2 py-2 text-center font-bold text-green-700">${formatWage(r.approvedWage)}</td>
+                                        <td class="px-2 py-2 text-center font-bold text-blue-700">${formatWage(r.potentialWage)}</td>
                                     </tr>
                                 `).join('')}
                                 <tr class="bg-gray-100 font-bold">
-                                    <td class="px-2 py-2" colspan="6">${currentLanguage === 'ar' ? 'الإجمالي (معتمد)' : 'Approved total'}</td>
-                                    <td class="px-2 py-2 text-center text-green-700">${grandApprovedTotal.toFixed(2)}</td>
+                                    <td class="px-2 py-2" colspan="7">${currentLanguage === 'ar' ? 'الإجمالي (معتمد)' : 'Approved total'}</td>
+                                    <td class="px-2 py-2 text-center text-green-700">${formatWage(grandApprovedTotal)}</td>
                                     <td class="px-2 py-2"></td>
                                 </tr>
                                 <tr class="bg-gray-50 font-bold">
-                                    <td class="px-2 py-2" colspan="7">${currentLanguage === 'ar' ? 'الإجمالي (محتمل)' : 'Potential total'}</td>
-                                    <td class="px-2 py-2 text-center text-blue-700">${grandPotentialTotal.toFixed(2)}</td>
+                                    <td class="px-2 py-2" colspan="8">${currentLanguage === 'ar' ? 'الإجمالي (محتمل)' : 'Potential total'}</td>
+                                    <td class="px-2 py-2 text-center text-blue-700">${formatWage(grandPotentialTotal)}</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -7169,7 +7174,6 @@
         const projectId = document.getElementById('report-vehicle-wages-project')?.value;
         const fromDate = document.getElementById('report-vehicle-wages-from')?.value;
         const toDate = document.getElementById('report-vehicle-wages-to')?.value;
-        const includeInactive = document.getElementById('report-vehicle-wages-include-inactive')?.checked === true;
         const hideZeroWage = document.getElementById('report-vehicle-wages-hide-zero-wage')?.checked === true;
         const resultsContainer = document.getElementById('report-results');
         if (!resultsContainer) return;
@@ -7208,11 +7212,8 @@
                 });
             }
 
-            if (!includeInactive) {
-                allVehicles = allVehicles.filter(v => v.status === 'active');
-            } else {
-                allVehicles = allVehicles.filter(v => v.status !== 'hidden');
-            }
+            // عرض الآليات التي لها حضور في الفترة فقط (نشط أو متوقف)
+            allVehicles = allVehicles.filter(v => Object.prototype.hasOwnProperty.call(allVehicleAttendance, v.id) && allVehicleAttendance[v.id].length > 0);
 
             if (allVehicles.length === 0) {
                 resultsContainer.innerHTML = `<p class="text-gray-500 text-center py-8">${currentLanguage === 'ar' ? 'لا توجد آليات في المشاريع المحددة' : 'No vehicles in the selected projects'}</p>`;
@@ -7253,13 +7254,13 @@
                 let approvedWage = 0;
                 let potentialWage = 0;
                 if (calcType === 'daily') {
-                    approvedWage = dailyWage * approvedWorkedDays;
-                    potentialWage = dailyWage * totalWorkedNumericDays;
+                    approvedWage = roundToNearest250(dailyWage * approvedWorkedDays);
+                    potentialWage = roundToNearest250(dailyWage * totalWorkedNumericDays);
                 } else {
                     const approvedFactor = daysInPeriod > 0 ? (approvedWorkedDays / daysInPeriod) : 0;
                     const totalFactor = daysInPeriod > 0 ? (totalWorkedNumericDays / daysInPeriod) : 0;
-                    approvedWage = monthlyWage * approvedFactor;
-                    potentialWage = monthlyWage * totalFactor;
+                    approvedWage = roundToNearest250(monthlyWage * approvedFactor);
+                    potentialWage = roundToNearest250(monthlyWage * totalFactor);
                 }
 
                 const project = projects.find(p => p.id === veh.projectId);
@@ -7299,10 +7300,10 @@
                     </div>
                     <p class="text-sm text-gray-600 mb-4">
                         ${currentLanguage === 'ar'
-                            ? 'الأجر المعتمد للآليات اليومية = الأجر اليومي × أيام العمل المعتمدة. الأجر المحتمل = الأجر اليومي × جميع أيام العمل (معتمدة وغير معتمدة). للآليات الشهرية يتم توزيع الأجر الشهري بنسبة أيام العمل (معتمدة/الكل) إلى عدد أيام الفترة.'
-                            : 'Approved wage for daily vehicles = daily wage × approved work days. Potential wage = daily wage × all work days. For monthly vehicles, wage is proportional to (work days / days in period) for approved and all days.'}
+                            ? 'يعرض كل آلية سُجّل لها حضور في الفترة (نشط أو متوقف). الأجر المعتمد للآليات اليومية = الأجر اليومي × أيام العمل المعتمدة. للآليات الشهرية يتم توزيع الأجر بنسبة أيام العمل إلى أيام الفترة.'
+                            : 'Shows every vehicle with attendance in the period (active or inactive). Approved wage for daily = daily wage × approved work days. For monthly vehicles, wage is proportional to work days in period.'}
                     </p>
-                    ${rows.length === 0 ? `<p class="text-gray-500 text-center py-8">${currentLanguage === 'ar' ? 'لا توجد آليات في الفترة المحددة' : 'No vehicles in the selected period'}</p>` : `
+                    ${rows.length === 0 ? `<p class="text-gray-500 text-center py-8">${currentLanguage === 'ar' ? 'لا توجد آليات لديها حضور في الفترة المحددة' : 'No vehicles with attendance in the selected period'}</p>` : `
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm">
                             <thead class="bg-gray-50">
@@ -7310,6 +7311,7 @@
                                     <th class="px-2 py-2 text-right">${t('vehicleCode')}</th>
                                     <th class="px-2 py-2 text-right">${t('vehicleName')}</th>
                                     <th class="px-2 py-2 text-right">${t('projects')}</th>
+                                    <th class="px-2 py-2 text-center">${t('status')}</th>
                                     <th class="px-2 py-2 text-right">${t('vehicleCalculationType')}</th>
                                     <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أيام عمل (معتمدة)' : 'Approved work days'}</th>
                                     <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أيام عمل (الكل)' : 'All work days'}</th>
@@ -7324,24 +7326,25 @@
                                         <td class="px-2 py-2 font-mono">${r.code || ''}</td>
                                         <td class="px-2 py-2 font-medium">${r.name || ''}</td>
                                         <td class="px-2 py-2">${r.projectName}</td>
+                                        <td class="px-2 py-2 text-center"><span class="px-2 py-0.5 text-xs rounded-full ${r.status === 'active' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600'}">${t(r.status || 'active')}</span></td>
                                         <td class="px-2 py-2">${t(r.calcType)}</td>
                                         <td class="px-2 py-2 text-center">${r.approvedWorkedDays.toFixed(2)}</td>
                                         <td class="px-2 py-2 text-center">${r.totalWorkedNumericDays.toFixed(2)}</td>
                                         <td class="px-2 py-2 text-center">
-                                            ${r.calcType === 'daily' ? r.dailyWage.toFixed(2) : r.monthlyWage.toFixed(2)}
+                                            ${formatWage(r.calcType === 'daily' ? r.dailyWage : r.monthlyWage)}
                                         </td>
-                                        <td class="px-2 py-2 text-center font-bold text-green-700">${r.approvedWage.toFixed(2)}</td>
-                                        <td class="px-2 py-2 text-center font-bold text-blue-700">${r.potentialWage.toFixed(2)}</td>
+                                        <td class="px-2 py-2 text-center font-bold text-green-700">${formatWage(r.approvedWage)}</td>
+                                        <td class="px-2 py-2 text-center font-bold text-blue-700">${formatWage(r.potentialWage)}</td>
                                     </tr>
                                 `).join('')}
                                 <tr class="bg-gray-100 font-bold">
-                                    <td class="px-2 py-2" colspan="7">${currentLanguage === 'ar' ? 'الإجمالي (معتمد)' : 'Approved total'}</td>
-                                    <td class="px-2 py-2 text-center text-green-700">${grandApprovedTotal.toFixed(2)}</td>
+                                    <td class="px-2 py-2" colspan="8">${currentLanguage === 'ar' ? 'الإجمالي (معتمد)' : 'Approved total'}</td>
+                                    <td class="px-2 py-2 text-center text-green-700">${formatWage(grandApprovedTotal)}</td>
                                     <td class="px-2 py-2"></td>
                                 </tr>
                                 <tr class="bg-gray-50 font-bold">
-                                    <td class="px-2 py-2" colspan="8">${currentLanguage === 'ar' ? 'الإجمالي (محتمل)' : 'Potential total'}</td>
-                                    <td class="px-2 py-2 text-center text-blue-700">${grandPotentialTotal.toFixed(2)}</td>
+                                    <td class="px-2 py-2" colspan="9">${currentLanguage === 'ar' ? 'الإجمالي (محتمل)' : 'Potential total'}</td>
+                                    <td class="px-2 py-2 text-center text-blue-700">${formatWage(grandPotentialTotal)}</td>
                                 </tr>
                             </tbody>
                         </table>
