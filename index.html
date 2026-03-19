@@ -8970,6 +8970,11 @@
             vehicles: 'الآليات: إدارة الآليات وربطها بالمشاريع.',
             attendance: 'الحضور: اختيار المشروع والشهر، تسجيل حضور الموظفين والآليات يومياً (يوم كامل، جزئي، غياب، إجازات، مهمة...)، اعتماد الدوام، تسجيل جماعي، اعتماد جزئي.',
             reports: 'التقارير: تقرير بالمشروع (لفترة زمنية) وتقرير بموظف (لفترة)، مع المؤجور/غير المؤجور والأجور للموظفين اليوميين.',
+            generalTitle: 'العاميين (موظفين/آليات)',
+            generalIntro: 'العامي هو موظف يومي أو آلية يمكن أن يعمل على عدة مشاريع. بدلاً من ربط الحضور بمشروع ثابت في البطاقة، يتم اختيار "مشروع اليوم" عند تسجيل الحضور ليكون التقرير صحيحاً حسب المشروع الفعلي.',
+            generalHowToCard: 'بطاقة الموظف/الآلية: عند اختيار "عام" يتم إسناد عدة مشاريع له (مشاريع مسموحة حسب صلاحيات المستخدم). عند اختيار "مخصص" يبقى مشروع واحد مثل الطريقة التقليدية.',
+            generalHowToAttendance: 'الحضور: ستجد تبويب "عاميين (موظفين)" و"عاميين (آليات)". عند النقر على خلية اليوم يجب اختيار "المشروع الذي عمل به اليوم" ثم اختيار حالة الحضور وحفظ السجل.',
+            generalHowToReports: 'تقارير العاميين: تعرض المشاريع التي يوجد فيها حضور ضمن الفترة فقط، وتوضح أيام العمل والأجر لكل مشروع، مع الإجمالي. للآليات يظهر نوع الاحتساب (يومي/شهري) والأجر المعتمد/المحتمل.',
             users: 'المستخدمون (للمدير): إضافة وتعديل مستخدمين وأدوارهم والمشاريع المسندة.',
             activityLog: 'سجل النشاط (للمدير): سجل بالعمليات (إضافة، تعديل، حذف) مع اسم المستخدم والوقت.',
             wageMgmt: 'إدارة الأجور الشهرية (للمدير): إعداد أجور الموظفين الشهرية.',
@@ -9011,6 +9016,11 @@
             vehicles: 'Vehicles: Manage vehicles and assign to projects.',
             attendance: 'Attendance: Select project and month; record daily attendance (full, partial, absent, leave, mission...); approve; bulk entry; partial approval.',
             reports: 'Reports: Project report (for a date range) and employee report; excused/unexcused and wages for daily employees.',
+            generalTitle: 'General (Employees/Vehicles)',
+            generalIntro: 'A general item is a daily employee or a vehicle that can work across multiple projects. For accurate reporting, you choose the "Project for the day" when recording attendance (so wages are attributed to the actual project worked).',
+            generalHowToCard: 'Employee/Vehicle card: Choosing "General" lets you assign multiple projects (subject to user permissions). Choosing "Specific" keeps a single project like the traditional flow.',
+            generalHowToAttendance: 'Attendance: Use the "General (daily)" and "General (vehicles)" tabs. When you click a day cell you must select the "Project for this day", then choose the attendance status and save.',
+            generalHowToReports: 'General wages reports: show only projects that have attendance in the selected period, with days and wages per project and totals. Vehicles include calculation type (daily/monthly) and approved/potential wages.',
             users: 'Users (Manager): Add and edit users, roles, and assigned projects.',
             activityLog: 'Activity Log (Manager): Log of actions (add, edit, delete) with user and time.',
             wageMgmt: 'Monthly Wage Management (Manager): Set employee monthly wages.',
@@ -9068,6 +9078,18 @@
                                 <li>${content.wageMgmt}</li>
                                 <li>${content.settings}</li>
                             </ul>
+                        </section>
+                        
+                        <section>
+                            <h3 class="text-lg font-bold text-gray-800 mb-2">${content.generalTitle}</h3>
+                            <div class="space-y-2 leading-relaxed">
+                                <p>${content.generalIntro}</p>
+                                <ul class="list-disc list-inside space-y-2 pl-2">
+                                    <li>${content.generalHowToCard}</li>
+                                    <li>${content.generalHowToAttendance}</li>
+                                    <li>${content.generalHowToReports}</li>
+                                </ul>
+                            </div>
                         </section>
                         
                         <section>
