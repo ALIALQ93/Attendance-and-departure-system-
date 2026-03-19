@@ -2851,6 +2851,13 @@
         
         // جلب المشاريع
         const projects = window.projectsListData || [];
+        // للمشرف/المعتمد: عرض المشاريع المسندة فقط
+        const allowedProjectIds = (currentUserData?.role === 'supervisor' || currentUserData?.role === 'approver')
+            ? (currentUserData.assignedProjects || [])
+            : null;
+        const allowedProjects = Array.isArray(allowedProjectIds) && allowedProjectIds.length > 0
+            ? projects.filter(p => allowedProjectIds.includes(p.id))
+            : projects;
         
         if (employeeId) {
             const doc = await db.collection('employees').doc(employeeId).get();
@@ -2863,11 +2870,16 @@
         // جلب الدوام الافتراضي من المشروع
         let defaultStart = '08:00';
         let defaultEnd = '17:00';
-        if (projects.length > 0) {
-            const firstProject = projects[0];
+        // للمشرف/المعتمد: نستخدم أول مشروع مسموح لتجنب افتراضات خارج الصلاحية
+        const scheduleProjects = allowedProjects.length > 0 ? allowedProjects : projects;
+        if (scheduleProjects.length > 0) {
+            const firstProject = scheduleProjects[0];
             defaultStart = firstProject.defaultSchedule?.startTime || '08:00';
             defaultEnd = firstProject.defaultSchedule?.endTime || '17:00';
         }
+        
+        const assignmentMode = employee?.assignmentMode || 'specific';
+        const assignedProjectIds = employee?.assignedProjectIds || [];
         
         const content = `
             <form id="employee-form" class="space-y-4">
@@ -2890,8 +2902,30 @@
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">${t('projects')} *</label>
                         <select id="employee-project" required class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" onchange="updateEmployeeSchedule()">
-                            ${projects.map(p => `<option value="${p.id}" data-start="${p.defaultSchedule?.startTime || '08:00'}" data-end="${p.defaultSchedule?.endTime || '17:00'}" ${employee?.projectId === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}
+                            ${allowedProjects.map(p => `<option value="${p.id}" data-start="${p.defaultSchedule?.startTime || '08:00'}" data-end="${p.defaultSchedule?.endTime || '17:00'}" ${employee?.projectId === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}
                         </select>
+                    </div>
+                </div>
+                
+                <!-- عام / مخصص (للموظف اليومي فقط) -->
+                <div id="employee-assignment-mode-wrapper" class="hidden">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">${currentLanguage === 'ar' ? 'نوع الإسناد' : 'Assignment type'} *</label>
+                    <select id="employee-assignment-mode" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" onchange="toggleEmployeeAssignmentMode()">
+                        <option value="specific" ${assignmentMode === 'specific' ? 'selected' : ''}>${currentLanguage === 'ar' ? 'مخصص' : 'Specific'}</option>
+                        <option value="general" ${assignmentMode === 'general' ? 'selected' : ''}>${currentLanguage === 'ar' ? 'عام' : 'General'}</option>
+                    </select>
+                </div>
+                
+                <!-- مشاريع متعددة للعاميين (للموظف اليومي فقط) -->
+                <div id="employee-assigned-projects-wrapper" class="hidden">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">${currentLanguage === 'ar' ? 'المشاريع المسندة' : 'Assigned projects'} *</label>
+                    <div id="employee-assigned-projects" class="grid grid-cols-2 gap-2">
+                        ${allowedProjects.map(p => `
+                            <label class="flex items-center gap-2 p-2 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                                <input type="checkbox" class="assigned-project-checkbox rounded text-primary-600" value="${p.id}" ${assignedProjectIds.includes(p.id) ? 'checked' : ''}>
+                                <span class="text-sm text-gray-700">${p.name}</span>
+                            </label>
+                        `).join('')}
                     </div>
                 </div>
                 
@@ -2961,6 +2995,7 @@
         // التأكد من إظهار/إخفاء حقل الأجر اليومي بشكل صحيح
         setTimeout(() => {
             toggleJobPositionField();
+            toggleEmployeeAssignmentMode();
         }, 100);
     }
     
@@ -2993,6 +3028,34 @@
         }
     }
     
+    function toggleEmployeeAssignmentMode() {
+        const typeSelect = document.getElementById('employee-type');
+        const modeWrapper = document.getElementById('employee-assignment-mode-wrapper');
+        const modeSelect = document.getElementById('employee-assignment-mode');
+        const assignedWrapper = document.getElementById('employee-assigned-projects-wrapper');
+        const projectSelect = document.getElementById('employee-project');
+        
+        if (!typeSelect) return;
+        
+        const isDaily = typeSelect.value === 'daily';
+        if (modeWrapper) modeWrapper.classList.toggle('hidden', !isDaily);
+        
+        // للموظف الشهري: مشروع واحد فقط
+        if (!isDaily) {
+            if (assignedWrapper) assignedWrapper.classList.add('hidden');
+            if (projectSelect) projectSelect.closest('div')?.classList?.remove('hidden');
+            return;
+        }
+        
+        const mode = modeSelect?.value || 'specific';
+        const isGeneral = mode === 'general';
+        
+        // مخصص: مشروع واحد
+        if (projectSelect) projectSelect.closest('div')?.classList?.toggle('hidden', isGeneral);
+        // عام: مشاريع متعددة
+        if (assignedWrapper) assignedWrapper.classList.toggle('hidden', !isGeneral);
+    }
+    
     async function saveEmployee() {
         const form = document.getElementById('employee-form');
         if (!form) {
@@ -3012,6 +3075,10 @@
         const name = (nameEl.value || '').trim();
         const type = form.querySelector('#employee-type')?.value || 'daily';
         const projectId = projectEl.value || '';
+        const assignmentMode = form.querySelector('#employee-assignment-mode')?.value || 'specific';
+        const assignedProjectIds = (type === 'daily' && assignmentMode === 'general')
+            ? Array.from(form.querySelectorAll('.assigned-project-checkbox:checked')).map(el => el.value)
+            : [];
         const startTime = form.querySelector('#employee-start')?.value || '08:00';
         const endTime = form.querySelector('#employee-end')?.value || '17:00';
         const phone = (form.querySelector('#employee-phone')?.value || '').trim();
@@ -3020,8 +3087,17 @@
         const dailyWageInput = form.querySelector('#employee-daily-wage');
         const dailyWage = dailyWageInput ? parseFloat(dailyWageInput.value) || null : null;
         
-        if (!name || !projectId) {
+        const effectiveProjectId = (type === 'daily' && assignmentMode === 'general')
+            ? (assignedProjectIds[0] || '')
+            : projectId;
+        
+        if (!name || !effectiveProjectId) {
             showToast(t('required'), 'error');
+            return;
+        }
+        
+        if (type === 'daily' && assignmentMode === 'general' && assignedProjectIds.length === 0) {
+            showToast(currentLanguage === 'ar' ? 'يرجى اختيار مشروع واحد على الأقل' : 'Please select at least one project', 'error');
             return;
         }
         
@@ -3047,13 +3123,18 @@
             const employeeData = {
                 name,
                 type,
-                projectId,
+                projectId: effectiveProjectId,
                 workSchedule: { startTime, endTime },
                 phone,
                 jobTitle,
                 note,
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             };
+            
+            if (type === 'daily') {
+                employeeData.assignmentMode = assignmentMode;
+                employeeData.assignedProjectIds = assignmentMode === 'general' ? assignedProjectIds : [];
+            }
             
             // إضافة الأجر اليومي للموظفين اليوميين فقط
             if (type === 'daily' && dailyWage !== null) {
@@ -3107,11 +3188,11 @@
                 await db.collection('employees').doc(id).update(employeeData);
                 
                 // تحديث عداد المشاريع إذا تغير المشروع
-                if (oldProjectId && oldProjectId !== projectId) {
+                if (oldProjectId && oldProjectId !== effectiveProjectId) {
                     await db.collection('projects').doc(oldProjectId).update({
                         employeesCount: firebase.firestore.FieldValue.increment(-1)
                     });
-                    await db.collection('projects').doc(projectId).update({
+                    await db.collection('projects').doc(effectiveProjectId).update({
                         employeesCount: firebase.firestore.FieldValue.increment(1)
                     });
                 }
@@ -3151,7 +3232,7 @@
                 await db.collection('settings').doc('counters').update({
                     employeeCounter: counter
                 });
-                await db.collection('projects').doc(projectId).update({
+                await db.collection('projects').doc(effectiveProjectId).update({
                     employeesCount: firebase.firestore.FieldValue.increment(1)
                 });
                 logActivity('create', 'employee', empRef.id, name, currentLanguage === 'ar' ? 'إضافة موظف' : 'Employee created');
@@ -4153,6 +4234,13 @@
         let title = t('addVehicle');
         
         const projects = window.projectsListData || [];
+        // للمشرف: عرض المشاريع المسندة فقط
+        const allowedProjectIds = currentUserData?.role === 'supervisor'
+            ? (currentUserData.assignedProjects || [])
+            : null;
+        const allowedProjects = Array.isArray(allowedProjectIds) && allowedProjectIds.length > 0
+            ? projects.filter(p => allowedProjectIds.includes(p.id))
+            : projects;
         const employees = window.employeesListData || [];
         
         if (vehicleId) {
@@ -4162,6 +4250,9 @@
                 title = t('editVehicle');
             }
         }
+        
+        const assignmentMode = vehicle?.assignmentMode || 'specific';
+        const assignedProjectIds = vehicle?.assignedProjectIds || [];
         
         const content = `
             <form id="vehicle-form" class="space-y-4">
@@ -4195,8 +4286,29 @@
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">${t('projects')} *</label>
                     <select id="vehicle-project" required class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none">
-                        ${projects.map(p => `<option value="${p.id}" ${vehicle?.projectId === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}
+                        ${allowedProjects.map(p => `<option value="${p.id}" ${vehicle?.projectId === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}
                     </select>
+                </div>
+                
+                <!-- عام / مخصص (للآليات) -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">${currentLanguage === 'ar' ? 'نوع الإسناد' : 'Assignment type'} *</label>
+                    <select id="vehicle-assignment-mode" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" onchange="toggleVehicleAssignmentMode()">
+                        <option value="specific" ${assignmentMode === 'specific' ? 'selected' : ''}>${currentLanguage === 'ar' ? 'مخصص' : 'Specific'}</option>
+                        <option value="general" ${assignmentMode === 'general' ? 'selected' : ''}>${currentLanguage === 'ar' ? 'عام' : 'General'}</option>
+                    </select>
+                </div>
+                
+                <div id="vehicle-assigned-projects-wrapper" class="${assignmentMode === 'general' ? '' : 'hidden'}">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">${currentLanguage === 'ar' ? 'المشاريع المسندة' : 'Assigned projects'} *</label>
+                    <div id="vehicle-assigned-projects" class="grid grid-cols-2 gap-2">
+                        ${allowedProjects.map(p => `
+                            <label class="flex items-center gap-2 p-2 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                                <input type="checkbox" class="vehicle-assigned-project-checkbox rounded text-primary-600" value="${p.id}" ${assignedProjectIds.includes(p.id) ? 'checked' : ''}>
+                                <span class="text-sm text-gray-700">${p.name}</span>
+                            </label>
+                        `).join('')}
+                    </div>
                 </div>
                 
                 <div id="rental-field" class="${vehicle?.ownership === 'rented' ? '' : 'hidden'}">
@@ -4270,6 +4382,9 @@
         `;
         
         openModal(title, content, footer);
+        setTimeout(() => {
+            toggleVehicleAssignmentMode();
+        }, 50);
     }
     
     function toggleRentalField() {
@@ -4278,6 +4393,16 @@
         if (ownershipEl && rentalField) {
             rentalField.classList.toggle('hidden', ownershipEl.value !== 'rented');
         }
+    }
+    
+    function toggleVehicleAssignmentMode() {
+        const modeSelect = document.getElementById('vehicle-assignment-mode');
+        const assignedWrapper = document.getElementById('vehicle-assigned-projects-wrapper');
+        const projectSelect = document.getElementById('vehicle-project');
+        if (!modeSelect) return;
+        const isGeneral = modeSelect.value === 'general';
+        if (assignedWrapper) assignedWrapper.classList.toggle('hidden', !isGeneral);
+        if (projectSelect) projectSelect.closest('div')?.classList?.toggle('hidden', isGeneral);
     }
 
     function addShiftRow() {
@@ -4318,6 +4443,10 @@
         const type = form.querySelector('#vehicle-type')?.value || 'pickup';
         const ownership = form.querySelector('#vehicle-ownership')?.value || 'owned';
         const projectId = projectEl.value || '';
+        const assignmentMode = form.querySelector('#vehicle-assignment-mode')?.value || 'specific';
+        const assignedProjectIds = assignmentMode === 'general'
+            ? Array.from(form.querySelectorAll('.vehicle-assigned-project-checkbox:checked')).map(el => el.value)
+            : [];
         const rentalCompany = (form.querySelector('#vehicle-rental')?.value || '').trim();
         const plateNumber = (form.querySelector('#vehicle-plate')?.value || '').trim();
         const internalNumber = (form.querySelector('#vehicle-internal')?.value || '').trim();
@@ -4327,8 +4456,17 @@
         const dailyWageValue = parseFloat(form.querySelector('#vehicle-daily-wage')?.value || '0') || 0;
         const monthlyWageValue = parseFloat(form.querySelector('#vehicle-monthly-wage')?.value || '0') || 0;
         
-        if (!name || !projectId) {
+        const effectiveProjectId = assignmentMode === 'general'
+            ? (assignedProjectIds[0] || '')
+            : projectId;
+        
+        if (!name || !effectiveProjectId) {
             showToast(t('required'), 'error');
+            return;
+        }
+        
+        if (assignmentMode === 'general' && assignedProjectIds.length === 0) {
+            showToast(currentLanguage === 'ar' ? 'يرجى اختيار مشروع واحد على الأقل' : 'Please select at least one project', 'error');
             return;
         }
         
@@ -4339,7 +4477,9 @@
                 name,
                 type,
                 ownership,
-                projectId,
+                projectId: effectiveProjectId,
+                assignmentMode,
+                assignedProjectIds: assignmentMode === 'general' ? assignedProjectIds : [],
                 rentalCompany: ownership === 'rented' ? rentalCompany : '',
                 plateNumber,
                 internalNumber,
@@ -4363,11 +4503,11 @@
                 await db.collection('vehicles').doc(id).update(vehicleData);
                 
                 // تحديث عدادات المشاريع
-                if (oldProjectId && oldProjectId !== projectId) {
+                if (oldProjectId && oldProjectId !== effectiveProjectId) {
                     await db.collection('projects').doc(oldProjectId).update({
                         vehiclesCount: firebase.firestore.FieldValue.increment(-1)
                     });
-                    await db.collection('projects').doc(projectId).update({
+                    await db.collection('projects').doc(effectiveProjectId).update({
                         vehiclesCount: firebase.firestore.FieldValue.increment(1)
                     });
                 }
@@ -4390,7 +4530,7 @@
                 await db.collection('settings').doc('counters').update({
                     vehicleCounter: counter
                 });
-                await db.collection('projects').doc(projectId).update({
+                await db.collection('projects').doc(effectiveProjectId).update({
                     vehiclesCount: firebase.firestore.FieldValue.increment(1)
                 });
                 logActivity('create', 'vehicle', vehicleRef.id, vehicleData.name, currentLanguage === 'ar' ? 'إضافة آلية' : 'Vehicle created');
@@ -4578,7 +4718,7 @@
                 
                 <!-- التبويبات -->
                 <div class="card overflow-hidden">
-                    <div class="flex border-b">
+                    <div class="flex border-b flex-wrap">
                         <button onclick="switchAttendanceTab('monthly')" class="tab-btn ${activeTab === 'monthly' ? 'active' : ''}" data-tab="monthly">
                             👥 ${t('monthly')}
                         </button>
@@ -4587,6 +4727,12 @@
                         </button>
                         <button onclick="switchAttendanceTab('vehicles')" class="tab-btn ${activeTab === 'vehicles' ? 'active' : ''}" data-tab="vehicles">
                             🚗 ${t('vehicles')}
+                        </button>
+                        <button onclick="switchAttendanceTab('daily_general')" class="tab-btn ${activeTab === 'daily_general' ? 'active' : ''}" data-tab="daily_general">
+                            👷 ${currentLanguage === 'ar' ? 'عاميين (موظفين)' : 'General (daily)'}
+                        </button>
+                        <button onclick="switchAttendanceTab('vehicles_general')" class="tab-btn ${activeTab === 'vehicles_general' ? 'active' : ''}" data-tab="vehicles_general">
+                            🚗 ${currentLanguage === 'ar' ? 'عاميين (آليات)' : 'General (vehicles)'}
                         </button>
                     </div>
                     
@@ -4728,7 +4874,7 @@
             const key = `${itemId}_${date}`;
             const record = attendanceChanges[key] || attendanceData[key];
             
-            const statuses = activeTab === 'vehicles' ? attendanceStatuses.vehicle : attendanceStatuses.employee;
+            const statuses = (activeTab === 'vehicles' || activeTab === 'vehicles_general') ? attendanceStatuses.vehicle : attendanceStatuses.employee;
             const statusInfo = record ? statuses.find(s => s.key === record.status) : null;
             
             // تحديث الخلية
@@ -4742,17 +4888,26 @@
     
     async function loadAttendanceTable() {
         const container = document.getElementById('attendance-table-container');
-        if (!selectedProject) {
+        const isGeneralTab = activeTab === 'daily_general' || activeTab === 'vehicles_general';
+        if (!selectedProject && !isGeneralTab) {
             container.innerHTML = `<p class="text-center py-8 text-gray-500">${t('select')} ${t('projects')}</p>`;
             return;
         }
         
         container.innerHTML = `<div class="text-center py-8"><div class="loader mx-auto"></div></div>`;
         
-        // بدء الاستماع للتغييرات
-        startAttendanceListener();
+        // بدء الاستماع للتغييرات (العاميين لا يستخدمون listener لمشروع واحد)
+        if (!isGeneralTab) startAttendanceListener();
         
         try {
+            const allowedProjectIds = (currentUserData?.role === 'supervisor' || currentUserData?.role === 'approver') && currentUserData.assignedProjects?.length > 0
+                ? currentUserData.assignedProjects
+                : null;
+            const projects = window.projectsListData || [];
+            const allowedProjects = Array.isArray(allowedProjectIds) && allowedProjectIds.length > 0
+                ? projects.filter(p => allowedProjectIds.includes(p.id))
+                : projects;
+            
             // جلب الموظفين/الآليات حسب التبويب
             let items = [];
             if (activeTab === 'vehicles') {
@@ -4761,6 +4916,37 @@
                     .where('status', '==', 'active')
                     .get();
                 snap.forEach(doc => items.push({ id: doc.id, ...doc.data() }));
+            } else if (activeTab === 'daily_general') {
+                const snap = await db.collection('employees')
+                    .where('type', '==', 'daily')
+                    .where('assignmentMode', '==', 'general')
+                    .where('status', '==', 'active')
+                    .get();
+                snap.forEach(doc => {
+                    const data = doc.data();
+                    if (allowedProjectIds && allowedProjectIds.length > 0) {
+                        const ids = data.assignedProjectIds || [];
+                        if (!ids.some(pid => allowedProjectIds.includes(pid))) return;
+                    }
+                    items.push({ id: doc.id, ...data });
+                });
+                if (!window.employeesData) window.employeesData = [];
+                items.forEach(emp => {
+                    if (!window.employeesData.find(e => e.id === emp.id)) window.employeesData.push(emp);
+                });
+            } else if (activeTab === 'vehicles_general') {
+                const snap = await db.collection('vehicles')
+                    .where('assignmentMode', '==', 'general')
+                    .where('status', '==', 'active')
+                    .get();
+                snap.forEach(doc => {
+                    const data = doc.data();
+                    if (allowedProjectIds && allowedProjectIds.length > 0) {
+                        const ids = data.assignedProjectIds || [];
+                        if (!ids.some(pid => allowedProjectIds.includes(pid))) return;
+                    }
+                    items.push({ id: doc.id, ...data });
+                });
             } else {
                 const type = activeTab === 'monthly' ? 'monthly' : 'daily';
                 const snap = await db.collection('employees')
@@ -4769,34 +4955,39 @@
                     .where('status', '==', 'active')
                     .get();
                 snap.forEach(doc => items.push({ id: doc.id, ...doc.data() }));
-                
-                // حفظ الموظفين للاستخدام في الإشعارات
                 if (!window.employeesData) window.employeesData = [];
                 items.forEach(emp => {
-                    if (!window.employeesData.find(e => e.id === emp.id)) {
-                        window.employeesData.push(emp);
-                    }
+                    if (!window.employeesData.find(e => e.id === emp.id)) window.employeesData.push(emp);
                 });
             }
             
             // جلب بيانات الحضور للشهر
             const startDate = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-01`;
             const endDate = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${getDaysInMonth(selectedYear, selectedMonth)}`;
-            
-            const collection = activeTab === 'vehicles' ? 'vehicleAttendance' : 'attendance';
-            const attendanceSnap = await db.collection(collection)
-                .where('projectId', '==', selectedProject)
-                .get();
+            const collection = (activeTab === 'vehicles' || activeTab === 'vehicles_general') ? 'vehicleAttendance' : 'attendance';
             
             attendanceData = {};
-            attendanceSnap.forEach(doc => {
-                const data = doc.data();
-                // تصفية حسب التاريخ
-                if (data.date >= startDate && data.date <= endDate) {
-                    const key = `${data.employeeId || data.vehicleId}_${data.date}`;
-                    attendanceData[key] = { id: doc.id, ...data };
+            if (isGeneralTab && allowedProjects.length > 0) {
+                for (const p of allowedProjects) {
+                    const snap = await db.collection(collection).where('projectId', '==', p.id).get();
+                    snap.forEach(doc => {
+                        const data = doc.data();
+                        if (data.date >= startDate && data.date <= endDate) {
+                            const key = `${data.employeeId || data.vehicleId}_${data.date}`;
+                            attendanceData[key] = { id: doc.id, ...data };
+                        }
+                    });
                 }
-            });
+            } else if (!isGeneralTab && selectedProject) {
+                const attendanceSnap = await db.collection(collection).where('projectId', '==', selectedProject).get();
+                attendanceSnap.forEach(doc => {
+                    const data = doc.data();
+                    if (data.date >= startDate && data.date <= endDate) {
+                        const key = `${data.employeeId || data.vehicleId}_${data.date}`;
+                        attendanceData[key] = { id: doc.id, ...data };
+                    }
+                });
+            }
             
             // إنشاء الأسابيع
             const weeks = getWeeks(selectedYear, selectedMonth);
@@ -4821,7 +5012,7 @@
             if (items.length === 0) {
                 container.innerHTML = `
                     <p class="text-center py-8 text-gray-500">
-                        ${activeTab === 'vehicles' ? t('noVehicles') : t('noEmployees')}
+                        ${(activeTab === 'vehicles' || activeTab === 'vehicles_general') ? t('noVehicles') : t('noEmployees')}
                     </p>
                 `;
                 updateAttendanceLegend();
@@ -4829,12 +5020,13 @@
                 return;
             }
             
+            const isVehicleTab = activeTab === 'vehicles' || activeTab === 'vehicles_general';
             let tableHTML = `
                 <table class="w-full attendance-table">
                     <thead>
                         <tr class="bg-gray-50">
                             <th class="px-4 py-3 text-right sticky right-0 bg-gray-50 min-w-[180px]">
-                                ${activeTab === 'vehicles' ? t('vehicles') : t('employees')}
+                                ${isVehicleTab ? t('vehicles') : t('employees')}
                             </th>
                             ${currentWeekDays.map(day => {
                                 const date = new Date(selectedYear, selectedMonth, day);
@@ -4879,7 +5071,7 @@
                 tableHTML += `
                     <tr class="border-t hover:bg-gray-50">
                         <td class="px-4 py-3 sticky right-0 bg-white">
-                            <div class="font-medium">${activeTab === 'vehicles' ? (vehicleIcons[item.type] || '📦') + ' ' : ''}${item.name}</div>
+                            <div class="font-medium">${isVehicleTab ? (vehicleIcons[item.type] || '📦') + ' ' : ''}${item.name}</div>
                             <div class="text-xs text-gray-500">${item.code}</div>
                         </td>
                         ${currentWeekDays.map(day => {
@@ -4887,7 +5079,7 @@
                             const key = `${itemId}_${dateStr}`;
                             const att = attendanceChanges[key] || attendanceData[key];
                             const status = att?.status || '';
-                            const statusInfo = (activeTab === 'vehicles' ? attendanceStatuses.vehicle : attendanceStatuses.employee)
+                            const statusInfo = (isVehicleTab ? attendanceStatuses.vehicle : attendanceStatuses.employee)
                                 .find(s => s.key === status);
                             const date = new Date(selectedYear, selectedMonth, day);
                             const isToday = formatDate(date) === formatDate(new Date());
@@ -4895,7 +5087,7 @@
                             
                             return `
                                 <td class="px-1 py-1 text-center ${isToday ? 'bg-primary-50' : ''} ${isFriday ? 'bg-gray-50' : ''}">
-                                    <button onclick="openAttendancePopup('${itemId}', '${item.name}', '${dateStr}', '${activeTab}')"
+                                    <button onclick="openAttendancePopup('${itemId}', '${(item.name || '').replace(/'/g, "\\'")}', '${dateStr}', '${activeTab}')"
                                             data-item-id="${itemId}" data-date="${dateStr}"
                                             class="attendance-cell w-10 h-10 rounded-lg flex items-center justify-center mx-auto text-lg
                                                    ${statusInfo ? statusInfo.color + ' text-white' : 'bg-gray-100 hover:bg-gray-200'}">
@@ -4930,7 +5122,7 @@
     
     function updateAttendanceLegend() {
         const legend = document.getElementById('attendance-legend');
-        const statuses = activeTab === 'vehicles' ? attendanceStatuses.vehicle : attendanceStatuses.employee;
+        const statuses = (activeTab === 'vehicles' || activeTab === 'vehicles_general') ? attendanceStatuses.vehicle : attendanceStatuses.employee;
         
         legend.innerHTML = `
             <div class="flex flex-wrap gap-3 text-sm">
@@ -4949,7 +5141,7 @@
         summary.innerHTML = `
             <div class="flex flex-wrap items-center gap-4 text-sm">
                 <span class="font-medium">
-                    ${activeTab === 'vehicles' ? t('vehicles') : t('employees')}: ${items.length}
+                    ${(activeTab === 'vehicles' || activeTab === 'vehicles_general') ? t('vehicles') : t('employees')}: ${items.length}
                 </span>
                 <span>|</span>
                 <span>${t('month')}: ${t(getMonthName(selectedMonth))} ${selectedYear}</span>
@@ -4970,8 +5162,10 @@
     }
     
     async function openAttendancePopup(itemId, itemName, dateStr, type) {
-        let statuses = type === 'vehicles' ? attendanceStatuses.vehicle : attendanceStatuses.employee;
-        if (type !== 'vehicles') statuses = statuses.filter(s => s.key !== 'shift' || type === 'daily');
+        const isGeneral = type === 'daily_general' || type === 'vehicles_general';
+        const effectiveType = type === 'daily_general' ? 'daily' : (type === 'vehicles_general' ? 'vehicles' : type);
+        let statuses = effectiveType === 'vehicles' ? attendanceStatuses.vehicle : attendanceStatuses.employee;
+        if (effectiveType !== 'vehicles') statuses = statuses.filter(s => s.key !== 'shift' || effectiveType === 'daily');
         const key = `${itemId}_${dateStr}`;
         const currentData = attendanceChanges[key] || attendanceData[key] || {};
         const existingRecord = attendanceData[key];
@@ -4982,6 +5176,15 @@
         const shiftDetailsList = currentData.shiftDetailsList || (currentData.shiftDetails ? [currentData.shiftDetails] : []);
         const missionDetails = currentData.missionDetails || {};
         const sickLeaveExcused = currentData.sickLeaveExcused !== false;
+        
+        let generalProjectOptions = [];
+        if (isGeneral) {
+            const item = (window.attendanceTableItems || []).find(i => i.id === itemId);
+            const assignedIds = item?.assignedProjectIds || [];
+            const allowedIds = (currentUserData?.role === 'supervisor' || currentUserData?.role === 'approver') && currentUserData.assignedProjects?.length > 0 ? currentUserData.assignedProjects : null;
+            const projectList = window.projectsListData || [];
+            generalProjectOptions = projectList.filter(p => assignedIds.includes(p.id) && (!allowedIds || allowedIds.includes(p.id)));
+        }
         
         let readOnlyMessage = '';
         if (!canEdit && existingRecord?.approved) readOnlyMessage = t('onlyManagerCanEditApproved');
@@ -4997,7 +5200,6 @@
             const projectsSnap = await db.collection('projects').get();
             projectsSnap.forEach(doc => {
                 const data = doc.data();
-                // فقط المشاريع النشطة وغير المشروع الحالي
                 if (data.status === 'active' && doc.id !== selectedProject) {
                     otherProjects.push({ id: doc.id, ...data });
                 }
@@ -5007,8 +5209,7 @@
             otherProjects = (window.projectsListData || []).filter(p => p.id !== selectedProject && p.status === 'active');
         }
         
-        // حفظ البيانات الحالية للاستخدام
-        window.currentAttendanceData = { itemId, itemName, dateStr, type, currentStatus, partialDetails, shiftDetailsList, missionDetails, otherProjects, sickLeaveExcused };
+        window.currentAttendanceData = { itemId, itemName, dateStr, type, effectiveType, isGeneral, generalProjectOptions, currentStatus, partialDetails, shiftDetailsList, missionDetails, otherProjects, sickLeaveExcused };
         
         const content = `
             <div class="space-y-4">
@@ -5020,6 +5221,15 @@
                 ${readOnlyMessage ? `<p class="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm">${readOnlyMessage}</p>` : ''}
                 
                 ${canEdit ? `
+                ${isGeneral && generalProjectOptions.length > 0 ? `
+                <div class="p-3 bg-indigo-50 rounded-lg border border-indigo-200">
+                    <label class="block text-sm font-medium text-indigo-800 mb-2">${currentLanguage === 'ar' ? 'المشروع الذي عمل به اليوم' : 'Project for this day'} *</label>
+                    <select id="attendance-general-project" required class="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500">
+                        <option value="">${currentLanguage === 'ar' ? 'اختر المشروع' : 'Select project'}</option>
+                        ${generalProjectOptions.map(p => `<option value="${p.id}" ${currentData.projectId === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}
+                    </select>
+                </div>
+                ` : ''}
                 <div class="grid grid-cols-2 gap-2" id="status-buttons">
                     ${statuses.map(s => `
                         <button onclick="selectAttendanceStatus('${s.key}')"
@@ -5033,7 +5243,7 @@
                 </div>
                 
                 <!-- تفاصيل المهمة -->
-                <div id="mission-details-section" class="${type === 'vehicles' || currentStatus !== 'onMission' ? 'hidden' : ''} p-4 bg-blue-50 rounded-lg border border-blue-200 space-y-4">
+                <div id="mission-details-section" class="${effectiveType === 'vehicles' || currentStatus !== 'onMission' ? 'hidden' : ''} p-4 bg-blue-50 rounded-lg border border-blue-200 space-y-4">
                     <p class="font-bold text-sm text-blue-800">📍 ${t('missionDetails')}</p>
                     
                     <div class="space-y-3">
@@ -5068,7 +5278,7 @@
                 </div>
                 
                 <!-- تفاصيل الدوام الجزئي -->
-                <div id="partial-details-section" class="${type === 'vehicles' || currentStatus !== 'partial' ? 'hidden' : ''} p-4 bg-yellow-50 rounded-lg border border-yellow-200 space-y-4">
+                <div id="partial-details-section" class="${effectiveType === 'vehicles' || currentStatus !== 'partial' ? 'hidden' : ''} p-4 bg-yellow-50 rounded-lg border border-yellow-200 space-y-4">
                     <p class="font-bold text-sm text-yellow-800">⏰ ${t('partialDetails')}</p>
                     
                     <div class="space-y-3">
@@ -5126,7 +5336,7 @@
                 </div>
                 
                 <!-- تفاصيل الشفت (للموظفين اليوميين والآليات) -->
-                <div id="shift-details-section" class="${(type !== 'daily' && type !== 'vehicles') || currentStatus !== 'shift' ? 'hidden' : ''} p-4 bg-indigo-50 rounded-lg border border-indigo-200 space-y-4">
+                <div id="shift-details-section" class="${(effectiveType !== 'daily' && effectiveType !== 'vehicles') || currentStatus !== 'shift' ? 'hidden' : ''} p-4 bg-indigo-50 rounded-lg border border-indigo-200 space-y-4">
                     <p class="font-bold text-sm text-indigo-800">🟦 ${t('shiftDetails')}</p>
                     <div id="shift-rows" class="space-y-2">
                         ${shiftDetailsList && shiftDetailsList.length ? shiftDetailsList.map((sd, index) => `
@@ -5157,7 +5367,7 @@
                 </div>
                 
                 <!-- تفاصيل الإجازة المرضية -->
-                <div id="sick-leave-details-section" class="${type === 'vehicles' || currentStatus !== 'sickLeave' ? 'hidden' : ''} p-4 bg-purple-50 rounded-lg border border-purple-200 space-y-4">
+                <div id="sick-leave-details-section" class="${effectiveType === 'vehicles' || currentStatus !== 'sickLeave' ? 'hidden' : ''} p-4 bg-purple-50 rounded-lg border border-purple-200 space-y-4">
                     <p class="font-bold text-sm text-purple-800">🟣 ${t('sickLeaveExcusedLabel')}</p>
                     <label class="flex items-center gap-3 p-2 bg-white rounded border cursor-pointer hover:bg-gray-50">
                         <input type="checkbox" id="sick-leave-excused" class="rounded text-primary-600"
@@ -5243,28 +5453,30 @@
         // حفظ الحالة المختارة
         window.currentAttendanceData.selectedStatus = status;
         
+        const data = window.currentAttendanceData || {};
+        const effType = data.effectiveType || data.type;
         // إظهار/إخفاء تفاصيل الدوام الجزئي
         const partialSection = document.getElementById('partial-details-section');
-        if (partialSection && window.currentAttendanceData.type !== 'vehicles') {
+        if (partialSection && effType !== 'vehicles') {
             partialSection.classList.toggle('hidden', status !== 'partial');
         }
         
         // إظهار/إخفاء تفاصيل الشفت (للموظفين اليوميين والآليات)
         const shiftSection = document.getElementById('shift-details-section');
         if (shiftSection) {
-            const showShift = (window.currentAttendanceData.type === 'daily' || window.currentAttendanceData.type === 'vehicles') && status === 'shift';
+            const showShift = (effType === 'daily' || effType === 'vehicles') && status === 'shift';
             shiftSection.classList.toggle('hidden', !showShift);
         }
         
         // إظهار/إخفاء تفاصيل المهمة
         const missionSection = document.getElementById('mission-details-section');
-        if (missionSection && window.currentAttendanceData.type !== 'vehicles') {
+        if (missionSection && effType !== 'vehicles') {
             missionSection.classList.toggle('hidden', status !== 'onMission');
         }
         
         // إظهار/إخفاء تفاصيل الإجازة المرضية
         const sickLeaveSection = document.getElementById('sick-leave-details-section');
-        if (sickLeaveSection && window.currentAttendanceData.type !== 'vehicles') {
+        if (sickLeaveSection && effType !== 'vehicles') {
             sickLeaveSection.classList.toggle('hidden', status !== 'sickLeave');
         }
     }
@@ -5280,12 +5492,23 @@
             return;
         }
         
+        let projectIdForRecord = selectedProject;
+        if (data.isGeneral) {
+            const projectEl = document.getElementById('attendance-general-project');
+            projectIdForRecord = projectEl?.value || '';
+            if (!projectIdForRecord) {
+                showToast(currentLanguage === 'ar' ? 'يرجى اختيار المشروع الذي عمل به اليوم' : 'Please select the project for this day', 'error');
+                return;
+            }
+        }
+        
         const key = `${data.itemId}_${data.dateStr}`;
         const note = document.getElementById('attendance-note')?.value || '';
+        const idKey = (data.type === 'vehicles' || data.type === 'vehicles_general') ? 'vehicleId' : 'employeeId';
         
         const attendanceRecord = {
-            [data.type === 'vehicles' ? 'vehicleId' : 'employeeId']: data.itemId,
-            projectId: selectedProject,
+            [idKey]: data.itemId,
+            projectId: projectIdForRecord,
             date: data.dateStr,
             status: status,
             note: note,
@@ -5294,7 +5517,7 @@
         };
         
         // إضافة تفاصيل الدوام الجزئي إذا كانت الحالة جزئي
-        if (status === 'partial' && data.type !== 'vehicles') {
+        if (status === 'partial' && (data.effectiveType || data.type) !== 'vehicles') {
             const partialDetails = {};
             
             const lateCheckbox = document.getElementById('partial-late');
@@ -5323,7 +5546,7 @@
         }
         
         // إضافة تفاصيل الشفت إذا كانت الحالة شفت (للموظفين اليوميين والآليات)
-        if (status === 'shift' && (data.type === 'daily' || data.type === 'vehicles')) {
+        if (status === 'shift' && ((data.effectiveType || data.type) === 'daily' || (data.effectiveType || data.type) === 'vehicles')) {
             const shiftRows = document.querySelectorAll('.shift-row');
             const shiftDetailsList = [];
             shiftRows.forEach(row => {
@@ -5346,13 +5569,13 @@
         }
         
         // إضافة خيار اعتبار الإجازة المرضية مؤجورة أو غير مؤجورة
-        if (status === 'sickLeave' && data.type !== 'vehicles') {
+        if (status === 'sickLeave' && (data.effectiveType || data.type) !== 'vehicles') {
             const sickLeaveExcusedEl = document.getElementById('sick-leave-excused');
             attendanceRecord.sickLeaveExcused = sickLeaveExcusedEl ? sickLeaveExcusedEl.checked : true;
         }
         
         // إضافة تفاصيل المهمة إذا كانت الحالة في مهمة
-        if (status === 'onMission' && data.type !== 'vehicles') {
+        if (status === 'onMission' && (data.effectiveType || data.type) !== 'vehicles') {
             const internalRadio = document.getElementById('mission-internal');
             const missionDetails = {};
             
@@ -5559,14 +5782,19 @@
             selectedItems = items.filter(item => selectedIds.includes(item.id));
         }
         
-        const itemIdKey = activeTab === 'vehicles' ? 'vehicleId' : 'employeeId';
+        const itemIdKey = (activeTab === 'vehicles' || activeTab === 'vehicles_general') ? 'vehicleId' : 'employeeId';
+        const projectForBulk = (activeTab === 'daily_general' || activeTab === 'vehicles_general') ? selectedProject : selectedProject;
+        if ((activeTab === 'daily_general' || activeTab === 'vehicles_general') && !selectedProject) {
+            showToast(currentLanguage === 'ar' ? 'اختر مشروعاً من الشريط العلوي أولاً' : 'Select a project from the header first', 'error');
+            return;
+        }
         
         let applied = 0;
         dates.forEach(dateStr => {
             selectedItems.forEach(item => {
                 const key = `${item.id}_${dateStr}`;
                 attendanceChanges[key] = {
-                    projectId: selectedProject,
+                    projectId: projectForBulk,
                     [itemIdKey]: item.id,
                     date: dateStr,
                     status: status,
@@ -5756,7 +5984,7 @@
         btn.textContent = t('saving');
         
         try {
-            const collection = activeTab === 'vehicles' ? 'vehicleAttendance' : 'attendance';
+            const collection = (activeTab === 'vehicles' || activeTab === 'vehicles_general') ? 'vehicleAttendance' : 'attendance';
             const batch = db.batch();
             const missionNotifications = []; // لتجميع الإشعارات
             
@@ -6190,6 +6418,60 @@
                             </label>
                             <button onclick="generateVehicleWagesReport()" class="w-full py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">
                                 ${t('view')} ${t('vehicleWagesReport')}
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- تقرير أجور العاميين (موظفين يوميين) -->
+                    <div class="card p-6">
+                        <h3 class="font-bold text-lg mb-4 flex items-center gap-2">
+                            👷💼 ${currentLanguage === 'ar' ? 'تقرير أجور العاميين (موظفين)' : 'General wages (daily employees)'}
+                        </h3>
+                        <p class="text-sm text-gray-600 mb-4">${currentLanguage === 'ar' ? 'يعرض أيام العمل والأجر لكل مشروع للموظفين اليوميين العاميين ضمن الفترة المحددة، مع الإجمالي.' : 'Shows work days and wages per project for general daily employees in the selected period, with totals.'}</p>
+                        <div class="space-y-4">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">${t('from')}</label>
+                                    <input type="date" id="report-general-wages-from" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500" value="${reportProjectDefaultFrom}">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">${t('to')}</label>
+                                    <input type="date" id="report-general-wages-to" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500" value="${reportProjectDefaultTo}">
+                                </div>
+                            </div>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" id="report-general-wages-hide-zero-wage" class="rounded text-primary-600">
+                                <span class="text-sm text-gray-700">${currentLanguage === 'ar' ? 'إخفاء من لا يملكون أجر' : 'Hide items with zero wage'}</span>
+                            </label>
+                            <button onclick="generateGeneralDailyWagesReport()" class="w-full py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">
+                                ${t('view')} ${currentLanguage === 'ar' ? 'تقرير أجور العاميين (موظفين)' : 'General wages (daily employees)'}
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- تقرير أجور العاميين (آليات) -->
+                    <div class="card p-6">
+                        <h3 class="font-bold text-lg mb-4 flex items-center gap-2">
+                            🚗🧾 ${currentLanguage === 'ar' ? 'تقرير أجور العاميين (آليات)' : 'General wages (vehicles)'}
+                        </h3>
+                        <p class="text-sm text-gray-600 mb-4">${currentLanguage === 'ar' ? 'يعرض أيام العمل والأجر لكل مشروع للآليات العامية ضمن الفترة المحددة، مع نوع الاحتساب (يومي/شهري) والإجمالي.' : 'Shows work days and wages per project for general vehicles, with calculation type and totals.'}</p>
+                        <div class="space-y-4">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">${t('from')}</label>
+                                    <input type="date" id="report-general-vehicle-wages-from" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500" value="${reportProjectDefaultFrom}">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">${t('to')}</label>
+                                    <input type="date" id="report-general-vehicle-wages-to" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500" value="${reportProjectDefaultTo}">
+                                </div>
+                            </div>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" id="report-general-vehicle-wages-hide-zero-wage" class="rounded text-primary-600">
+                                <span class="text-sm text-gray-700">${currentLanguage === 'ar' ? 'إخفاء من لا يملكون أجر' : 'Hide items with zero wage'}</span>
+                            </label>
+                            <button onclick="generateGeneralVehicleWagesReport()" class="w-full py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">
+                                ${t('view')} ${currentLanguage === 'ar' ? 'تقرير أجور العاميين (آليات)' : 'General wages (vehicles)'}
                             </button>
                         </div>
                     </div>
@@ -7355,6 +7637,428 @@
             window._lastReportHtml = resultsContainer.innerHTML;
         } catch (error) {
             console.error('Error generating vehicle wages report:', error);
+            resultsContainer.innerHTML = `<p class="text-red-500 text-center py-8">${t('error')}</p>`;
+        }
+    }
+
+    async function generateGeneralDailyWagesReport() {
+        const fromDate = document.getElementById('report-general-wages-from')?.value;
+        const toDate = document.getElementById('report-general-wages-to')?.value;
+        const hideZeroWage = document.getElementById('report-general-wages-hide-zero-wage')?.checked === true;
+        const resultsContainer = document.getElementById('report-results');
+        if (!resultsContainer) return;
+
+        resultsContainer.innerHTML = `<div class="text-center py-8"><div class="loader mx-auto"></div></div>`;
+
+        try {
+            const fromNorm = toYyyyMmDd(fromDate) || fromDate;
+            const toNorm = toYyyyMmDd(toDate) || toDate;
+
+            const allowedProjectIds = (currentUserData?.role === 'supervisor' || currentUserData?.role === 'approver') && currentUserData.assignedProjects?.length > 0
+                ? currentUserData.assignedProjects
+                : null;
+            const projects = (window.projectsListData || []).filter(p => p.status !== 'hidden' && (!allowedProjectIds || allowedProjectIds.includes(p.id)));
+
+            // جلب الموظفين اليوميين العاميين
+            const generalEmployeesSnap = await db.collection('employees')
+                .where('type', '==', 'daily')
+                .where('assignmentMode', '==', 'general')
+                .get();
+            const employees = [];
+            generalEmployeesSnap.forEach(doc => {
+                const data = doc.data();
+                if (data.status === 'hidden') return;
+                if (allowedProjectIds && allowedProjectIds.length > 0) {
+                    const ids = data.assignedProjectIds || [];
+                    if (!ids.some(pid => allowedProjectIds.includes(pid))) return;
+                }
+                employees.push({ id: doc.id, ...data });
+            });
+
+            // attendanceByEmployee[empId][projectId] = { allDays, approvedDays }
+            const attendanceByEmployee = {};
+            for (const p of projects) {
+                const attSnap = await db.collection('attendance').where('projectId', '==', p.id).get();
+                attSnap.forEach(doc => {
+                    const data = doc.data();
+                    const dateStr = toYyyyMmDd(data.date);
+                    if (!dateStr || dateStr < fromNorm || dateStr > toNorm) return;
+                    const empId = data.employeeId;
+                    if (!empId) return;
+                    if (!employees.find(e => e.id === empId)) return;
+
+                    let dayValue = 0;
+                    if (data.status === 'full_day') {
+                        dayValue = 1;
+                    } else if (data.status === 'partial') {
+                        dayValue = data.partialDetails?.remainderExcused === true ? 1 : getPartialEquivalentDays(data);
+                    } else if (data.status === 'shift') {
+                        dayValue = getShiftEquivalentDays(data);
+                    } else if (data.status === 'sickLeave') {
+                        dayValue = data.sickLeaveExcused === false ? 0 : 1;
+                    } else if (['excusedAbsent','annualLeave','emergencyLeave','unpaidLeave','periodicLeave','officialHoliday','onMission'].includes(data.status)) {
+                        dayValue = 1;
+                    } else if (data.status === 'absent') {
+                        dayValue = 0;
+                    }
+
+                    if (!attendanceByEmployee[empId]) attendanceByEmployee[empId] = {};
+                    if (!attendanceByEmployee[empId][p.id]) attendanceByEmployee[empId][p.id] = { allDays: 0, approvedDays: 0 };
+                    attendanceByEmployee[empId][p.id].allDays += dayValue;
+                    if (data.approved === true) attendanceByEmployee[empId][p.id].approvedDays += dayValue;
+                });
+            }
+
+            // الشهر/السنة لتحديد الأجر (مثل باقي التقارير)
+            const fromDateObj = new Date(fromDate);
+            const reportMonth = fromDateObj.getMonth() + 1;
+            const reportYear = fromDateObj.getFullYear();
+
+            const projectIdsInReportSet = new Set();
+            employees.forEach(emp => {
+                const perProject = attendanceByEmployee[emp.id] || {};
+                Object.keys(perProject).forEach(pid => projectIdsInReportSet.add(pid));
+            });
+            const projectIdsInReport = Array.from(projectIdsInReportSet)
+                .map(pid => ({ id: pid, name: projects.find(p => p.id === pid)?.name || pid }))
+                .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+                .map(p => p.id);
+
+            let rows = employees
+                .filter(e => attendanceByEmployee[e.id] && Object.keys(attendanceByEmployee[e.id]).length > 0)
+                .map(emp => {
+                    const perProject = attendanceByEmployee[emp.id] || {};
+                    const wageHistory = emp.wageHistory || [];
+                    const monthWage = wageHistory.find(w => w.month === reportMonth && w.year === reportYear);
+                    const dailyWage = monthWage ? monthWage.wage : (emp.dailyWage || 0);
+
+                    const byProject = {};
+                    projectIdsInReport.forEach(pid => {
+                        const v = perProject[pid] || { allDays: 0, approvedDays: 0 };
+                        const approvedWage = roundToNearest250(dailyWage * (v.approvedDays || 0));
+                        const potentialWage = roundToNearest250(dailyWage * (v.allDays || 0));
+                        byProject[pid] = {
+                            approvedDays: v.approvedDays || 0,
+                            allDays: v.allDays || 0,
+                            approvedWage,
+                            potentialWage
+                        };
+                    });
+
+                    const totalApprovedDays = Object.values(byProject).reduce((s, r) => s + (r.approvedDays || 0), 0);
+                    const totalAllDays = Object.values(byProject).reduce((s, r) => s + (r.allDays || 0), 0);
+                    const totalApprovedWage = Object.values(byProject).reduce((s, r) => s + (r.approvedWage || 0), 0);
+                    const totalPotentialWage = Object.values(byProject).reduce((s, r) => s + (r.potentialWage || 0), 0);
+
+                    return {
+                        ...emp,
+                        dailyWage,
+                        byProject,
+                        totalApprovedDays,
+                        totalAllDays,
+                        totalApprovedWage,
+                        totalPotentialWage
+                    };
+                });
+
+            if (hideZeroWage) {
+                rows = rows.filter(r => r.dailyWage > 0 && (r.totalApprovedWage > 0 || r.totalPotentialWage > 0));
+            }
+
+            rows.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+            const grandApprovedTotal = rows.reduce((sum, r) => sum + r.totalApprovedWage, 0);
+            const grandPotentialTotal = rows.reduce((sum, r) => sum + r.totalPotentialWage, 0);
+
+            const projectHeaderLabels = projectIdsInReport.map(pid => projects.find(p => p.id === pid)?.name || '-');
+            resultsContainer.innerHTML = `
+                <div class="card p-6">
+                    <div class="flex items-center justify-between mb-6 flex-wrap gap-4">
+                        <div>
+                            <h3 class="font-bold text-xl">${currentLanguage === 'ar' ? 'تقرير أجور العاميين (موظفين)' : 'General wages (daily employees)'}</h3>
+                            <p class="text-gray-500">${fromDate} - ${toDate}</p>
+                        </div>
+                        <button onclick="printReportInNewTab()" class="no-print px-4 py-2 border rounded-lg hover:bg-gray-100">🖨️ ${t('print')}</button>
+                    </div>
+                    ${rows.length === 0 ? `<p class="text-gray-500 text-center py-8">${currentLanguage === 'ar' ? 'لا توجد بيانات' : 'No data'}</p>` : `
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-2 py-2 text-right" rowspan="2">${t('employeeCode')}</th>
+                                    <th class="px-2 py-2 text-right" rowspan="2">${t('employeeName')}</th>
+                                    <th class="px-2 py-2 text-center" rowspan="2">${t('status')}</th>
+                                    <th class="px-2 py-2 text-center" rowspan="2">${t('currentDailyWage')} (IQD)</th>
+                                    ${projectHeaderLabels.map(name => `
+                                        <th class="px-2 py-2 text-center border-l" colspan="4">${name}</th>
+                                    `).join('')}
+                                    <th class="px-2 py-2 text-center border-l" colspan="4">${currentLanguage === 'ar' ? 'الإجمالي' : 'Total'}</th>
+                                </tr>
+                                <tr>
+                                    ${projectIdsInReport.map(() => `
+                                        <th class="px-2 py-2 text-center border-l">${currentLanguage === 'ar' ? 'أيام معتمدة' : 'Appr days'}</th>
+                                        <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أجر معتمد' : 'Appr wage'}</th>
+                                        <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أيام الكل' : 'All days'}</th>
+                                        <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أجر الكل' : 'All wage'}</th>
+                                    `).join('')}
+                                    <th class="px-2 py-2 text-center border-l">${currentLanguage === 'ar' ? 'أيام معتمدة' : 'Appr days'}</th>
+                                    <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أجر معتمد' : 'Appr wage'}</th>
+                                    <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أيام الكل' : 'All days'}</th>
+                                    <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أجر الكل' : 'All wage'}</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y">
+                                ${rows.map(r => `
+                                    <tr class="hover:bg-gray-50">
+                                        <td class="px-2 py-2 font-mono">${r.code || ''}</td>
+                                        <td class="px-2 py-2">${r.name || ''}</td>
+                                        <td class="px-2 py-2 text-center"><span class="px-2 py-0.5 text-xs rounded-full ${r.status === 'active' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600'}">${t(r.status || 'active')}</span></td>
+                                        <td class="px-2 py-2 text-center">${formatWage(r.dailyWage)}</td>
+                                        ${projectIdsInReport.map(pid => {
+                                            const pr = r.byProject?.[pid] || { approvedDays: 0, approvedWage: 0, allDays: 0, potentialWage: 0 };
+                                            return `
+                                                <td class="px-2 py-2 text-center border-l">${(pr.approvedDays || 0).toFixed(2)}</td>
+                                                <td class="px-2 py-2 text-center text-green-700">${formatWage(pr.approvedWage || 0)}</td>
+                                                <td class="px-2 py-2 text-center">${(pr.allDays || 0).toFixed(2)}</td>
+                                                <td class="px-2 py-2 text-center text-blue-700">${formatWage(pr.potentialWage || 0)}</td>
+                                            `;
+                                        }).join('')}
+                                        <td class="px-2 py-2 text-center border-l font-semibold">${(r.totalApprovedDays || 0).toFixed(2)}</td>
+                                        <td class="px-2 py-2 text-center font-bold text-green-700">${formatWage(r.totalApprovedWage)}</td>
+                                        <td class="px-2 py-2 text-center font-semibold">${(r.totalAllDays || 0).toFixed(2)}</td>
+                                        <td class="px-2 py-2 text-center font-bold text-blue-700">${formatWage(r.totalPotentialWage)}</td>
+                                    </tr>
+                                `).join('')}
+                                <tr class="bg-gray-100 font-bold">
+                                    <td class="px-2 py-2" colspan="${4 + (projectIdsInReport.length * 4) + 2}">${currentLanguage === 'ar' ? 'الإجمالي (معتمد)' : 'Approved total'}</td>
+                                    <td class="px-2 py-2 text-center text-green-700" colspan="2">${formatWage(grandApprovedTotal)}</td>
+                                </tr>
+                                <tr class="bg-gray-50 font-bold">
+                                    <td class="px-2 py-2" colspan="${4 + (projectIdsInReport.length * 4) + 3}">${currentLanguage === 'ar' ? 'الإجمالي (محتمل)' : 'Potential total'}</td>
+                                    <td class="px-2 py-2 text-center text-blue-700">${formatWage(grandPotentialTotal)}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    `}
+                </div>
+            `;
+            window._lastReportHtml = resultsContainer.innerHTML;
+        } catch (error) {
+            console.error('Error generating general daily wages report:', error);
+            resultsContainer.innerHTML = `<p class="text-red-500 text-center py-8">${t('error')}</p>`;
+        }
+    }
+
+    async function generateGeneralVehicleWagesReport() {
+        const fromDate = document.getElementById('report-general-vehicle-wages-from')?.value;
+        const toDate = document.getElementById('report-general-vehicle-wages-to')?.value;
+        const hideZeroWage = document.getElementById('report-general-vehicle-wages-hide-zero-wage')?.checked === true;
+        const resultsContainer = document.getElementById('report-results');
+        if (!resultsContainer) return;
+
+        resultsContainer.innerHTML = `<div class="text-center py-8"><div class="loader mx-auto"></div></div>`;
+
+        try {
+            const fromNorm = toYyyyMmDd(fromDate) || fromDate;
+            const toNorm = toYyyyMmDd(toDate) || toDate;
+
+            const allowedProjectIds = (currentUserData?.role === 'supervisor' || currentUserData?.role === 'approver') && currentUserData.assignedProjects?.length > 0
+                ? currentUserData.assignedProjects
+                : null;
+            const projects = (window.projectsListData || []).filter(p => p.status !== 'hidden' && (!allowedProjectIds || allowedProjectIds.includes(p.id)));
+
+            // جلب الآليات العامية
+            const generalVehSnap = await db.collection('vehicles')
+                .where('assignmentMode', '==', 'general')
+                .get();
+            const vehicles = [];
+            generalVehSnap.forEach(doc => {
+                const data = doc.data();
+                if (data.status === 'hidden') return;
+                if (allowedProjectIds && allowedProjectIds.length > 0) {
+                    const ids = data.assignedProjectIds || [];
+                    if (!ids.some(pid => allowedProjectIds.includes(pid))) return;
+                }
+                vehicles.push({ id: doc.id, ...data });
+            });
+
+            const fromParts = (toYyyyMmDd(fromDate) || fromDate).split('-').map(Number);
+            const toParts = (toYyyyMmDd(toDate) || toDate).split('-').map(Number);
+            const fromD = new Date(fromParts[0], fromParts[1] - 1, fromParts[2]);
+            const toD = new Date(toParts[0], toParts[1] - 1, toParts[2]);
+            const daysInPeriod = Math.max(1, Math.round((toD - fromD) / (24 * 60 * 60 * 1000)) + 1);
+
+            // attendanceByVehicle[vehId][projectId] = { allDays, approvedDays }
+            const attendanceByVehicle = {};
+            for (const p of projects) {
+                const attSnap = await db.collection('vehicleAttendance').where('projectId', '==', p.id).get();
+                attSnap.forEach(doc => {
+                    const data = doc.data();
+                    const dateStr = toYyyyMmDd(data.date);
+                    if (!dateStr || dateStr < fromNorm || dateStr > toNorm) return;
+                    const vehId = data.vehicleId;
+                    if (!vehId) return;
+                    if (!vehicles.find(v => v.id === vehId)) return;
+
+                    let dayValue = 0;
+                    if (data.status === 'worked') dayValue = 1;
+                    else if (data.status === 'workedPartial') dayValue = 0.5;
+                    else if (data.status === 'shift') dayValue = getShiftEquivalentDays(data);
+
+                    if (!attendanceByVehicle[vehId]) attendanceByVehicle[vehId] = {};
+                    if (!attendanceByVehicle[vehId][p.id]) attendanceByVehicle[vehId][p.id] = { allDays: 0, approvedDays: 0 };
+                    attendanceByVehicle[vehId][p.id].allDays += dayValue;
+                    if (data.approved === true) attendanceByVehicle[vehId][p.id].approvedDays += dayValue;
+                });
+            }
+
+            const projectIdsInReportSet = new Set();
+            vehicles.forEach(veh => {
+                const perProject = attendanceByVehicle[veh.id] || {};
+                Object.keys(perProject).forEach(pid => projectIdsInReportSet.add(pid));
+            });
+            const projectIdsInReport = Array.from(projectIdsInReportSet)
+                .map(pid => ({ id: pid, name: projects.find(p => p.id === pid)?.name || pid }))
+                .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+                .map(p => p.id);
+
+            let rows = vehicles
+                .filter(v => attendanceByVehicle[v.id] && Object.keys(attendanceByVehicle[v.id]).length > 0)
+                .map(veh => {
+                    const perProject = attendanceByVehicle[veh.id] || {};
+                    const calcType = veh.calculationType || 'daily';
+                    const dailyWage = calcType === 'daily' ? (veh.dailyWage || 0) : 0;
+                    const monthlyWage = calcType === 'monthly' ? (veh.monthlyWage || 0) : 0;
+
+                    const byProject = {};
+                    projectIdsInReport.forEach(pid => {
+                        const v = perProject[pid] || { allDays: 0, approvedDays: 0 };
+                        let approvedWage = 0;
+                        let potentialWage = 0;
+                        if (calcType === 'daily') {
+                            approvedWage = roundToNearest250(dailyWage * (v.approvedDays || 0));
+                            potentialWage = roundToNearest250(dailyWage * (v.allDays || 0));
+                        } else {
+                            const approvedFactor = daysInPeriod > 0 ? ((v.approvedDays || 0) / daysInPeriod) : 0;
+                            const totalFactor = daysInPeriod > 0 ? ((v.allDays || 0) / daysInPeriod) : 0;
+                            approvedWage = roundToNearest250(monthlyWage * approvedFactor);
+                            potentialWage = roundToNearest250(monthlyWage * totalFactor);
+                        }
+                        byProject[pid] = {
+                            approvedDays: v.approvedDays || 0,
+                            allDays: v.allDays || 0,
+                            approvedWage,
+                            potentialWage
+                        };
+                    });
+
+                    const totalApprovedDays = Object.values(byProject).reduce((s, r) => s + (r.approvedDays || 0), 0);
+                    const totalAllDays = Object.values(byProject).reduce((s, r) => s + (r.allDays || 0), 0);
+                    const totalApprovedWage = Object.values(byProject).reduce((s, r) => s + (r.approvedWage || 0), 0);
+                    const totalPotentialWage = Object.values(byProject).reduce((s, r) => s + (r.potentialWage || 0), 0);
+
+                    return {
+                        ...veh,
+                        calcType,
+                        dailyWage,
+                        monthlyWage,
+                        byProject,
+                        totalApprovedDays,
+                        totalAllDays,
+                        totalApprovedWage,
+                        totalPotentialWage
+                    };
+                });
+
+            if (hideZeroWage) {
+                rows = rows.filter(r => {
+                    const baseWage = r.calcType === 'daily' ? r.dailyWage : r.monthlyWage;
+                    return baseWage > 0 && (r.totalApprovedWage > 0 || r.totalPotentialWage > 0);
+                });
+            }
+
+            rows.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+            const grandApprovedTotal = rows.reduce((sum, r) => sum + r.totalApprovedWage, 0);
+            const grandPotentialTotal = rows.reduce((sum, r) => sum + r.totalPotentialWage, 0);
+
+            const projectHeaderLabels = projectIdsInReport.map(pid => projects.find(p => p.id === pid)?.name || '-');
+            resultsContainer.innerHTML = `
+                <div class="card p-6">
+                    <div class="flex items-center justify-between mb-6 flex-wrap gap-4">
+                        <div>
+                            <h3 class="font-bold text-xl">${currentLanguage === 'ar' ? 'تقرير أجور العاميين (آليات)' : 'General wages (vehicles)'}</h3>
+                            <p class="text-gray-500">${fromDate} - ${toDate}</p>
+                        </div>
+                        <button onclick="printReportInNewTab()" class="no-print px-4 py-2 border rounded-lg hover:bg-gray-100">🖨️ ${t('print')}</button>
+                    </div>
+                    ${rows.length === 0 ? `<p class="text-gray-500 text-center py-8">${currentLanguage === 'ar' ? 'لا توجد بيانات' : 'No data'}</p>` : `
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-2 py-2 text-right" rowspan="2">${t('vehicleCode')}</th>
+                                    <th class="px-2 py-2 text-right" rowspan="2">${t('vehicleName')}</th>
+                                    <th class="px-2 py-2 text-center" rowspan="2">${t('status')}</th>
+                                    <th class="px-2 py-2 text-right" rowspan="2">${t('vehicleCalculationType')}</th>
+                                    <th class="px-2 py-2 text-center" rowspan="2">${currentLanguage === 'ar' ? 'الأجر' : 'Wage'} (IQD)</th>
+                                    ${projectHeaderLabels.map(name => `
+                                        <th class="px-2 py-2 text-center border-l" colspan="4">${name}</th>
+                                    `).join('')}
+                                    <th class="px-2 py-2 text-center border-l" colspan="4">${currentLanguage === 'ar' ? 'الإجمالي' : 'Total'}</th>
+                                </tr>
+                                <tr>
+                                    ${projectIdsInReport.map(() => `
+                                        <th class="px-2 py-2 text-center border-l">${currentLanguage === 'ar' ? 'أيام معتمدة' : 'Appr days'}</th>
+                                        <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أجر معتمد' : 'Appr wage'}</th>
+                                        <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أيام الكل' : 'All days'}</th>
+                                        <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أجر الكل' : 'All wage'}</th>
+                                    `).join('')}
+                                    <th class="px-2 py-2 text-center border-l">${currentLanguage === 'ar' ? 'أيام معتمدة' : 'Appr days'}</th>
+                                    <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أجر معتمد' : 'Appr wage'}</th>
+                                    <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أيام الكل' : 'All days'}</th>
+                                    <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أجر الكل' : 'All wage'}</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y">
+                                ${rows.map(r => `
+                                    <tr class="hover:bg-gray-50">
+                                        <td class="px-2 py-2 font-mono">${r.code || ''}</td>
+                                        <td class="px-2 py-2">${r.name || ''}</td>
+                                        <td class="px-2 py-2 text-center"><span class="px-2 py-0.5 text-xs rounded-full ${r.status === 'active' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600'}">${t(r.status || 'active')}</span></td>
+                                        <td class="px-2 py-2">${t(r.calcType)}</td>
+                                        <td class="px-2 py-2 text-center">${formatWage(r.calcType === 'daily' ? r.dailyWage : r.monthlyWage)}</td>
+                                        ${projectIdsInReport.map(pid => {
+                                            const pr = r.byProject?.[pid] || { approvedDays: 0, approvedWage: 0, allDays: 0, potentialWage: 0 };
+                                            return `
+                                                <td class="px-2 py-2 text-center border-l">${(pr.approvedDays || 0).toFixed(2)}</td>
+                                                <td class="px-2 py-2 text-center text-green-700">${formatWage(pr.approvedWage || 0)}</td>
+                                                <td class="px-2 py-2 text-center">${(pr.allDays || 0).toFixed(2)}</td>
+                                                <td class="px-2 py-2 text-center text-blue-700">${formatWage(pr.potentialWage || 0)}</td>
+                                            `;
+                                        }).join('')}
+                                        <td class="px-2 py-2 text-center border-l font-semibold">${(r.totalApprovedDays || 0).toFixed(2)}</td>
+                                        <td class="px-2 py-2 text-center font-bold text-green-700">${formatWage(r.totalApprovedWage)}</td>
+                                        <td class="px-2 py-2 text-center font-semibold">${(r.totalAllDays || 0).toFixed(2)}</td>
+                                        <td class="px-2 py-2 text-center font-bold text-blue-700">${formatWage(r.totalPotentialWage)}</td>
+                                    </tr>
+                                `).join('')}
+                                <tr class="bg-gray-100 font-bold">
+                                    <td class="px-2 py-2" colspan="${5 + (projectIdsInReport.length * 4) + 2}">${currentLanguage === 'ar' ? 'الإجمالي (معتمد)' : 'Approved total'}</td>
+                                    <td class="px-2 py-2 text-center text-green-700" colspan="2">${formatWage(grandApprovedTotal)}</td>
+                                </tr>
+                                <tr class="bg-gray-50 font-bold">
+                                    <td class="px-2 py-2" colspan="${5 + (projectIdsInReport.length * 4) + 3}">${currentLanguage === 'ar' ? 'الإجمالي (محتمل)' : 'Potential total'}</td>
+                                    <td class="px-2 py-2 text-center text-blue-700">${formatWage(grandPotentialTotal)}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    `}
+                </div>
+            `;
+            window._lastReportHtml = resultsContainer.innerHTML;
+        } catch (error) {
+            console.error('Error generating general vehicle wages report:', error);
             resultsContainer.innerHTML = `<p class="text-red-500 text-center py-8">${t('error')}</p>`;
         }
     }
