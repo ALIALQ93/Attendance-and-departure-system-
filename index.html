@@ -784,6 +784,10 @@
             employeeName: "اسم الموظف",
             employeeCode: "رمز الموظف",
             employeeType: "نوع الموظف",
+            employeeAssignmentScope: "تعيين المشروع",
+            employeeGeneral: "عام",
+            employeeSpecific: "مخصص",
+            employeesFilterAssignment: "عام / مخصص",
             daily: "يومي",
             monthly: "شهري",
             phone: "رقم الهاتف",
@@ -1127,6 +1131,10 @@
             employeeName: "Employee Name",
             employeeCode: "Employee Code",
             employeeType: "Employee Type",
+            employeeAssignmentScope: "Project assignment",
+            employeeGeneral: "General",
+            employeeSpecific: "Dedicated",
+            employeesFilterAssignment: "General / Dedicated",
             daily: "Daily",
             monthly: "Monthly",
             phone: "Phone",
@@ -2671,6 +2679,11 @@
                             <option value="daily">${t('daily')}</option>
                             <option value="monthly">${t('monthly')}</option>
                         </select>
+                        <select id="employees-assignment-filter" onchange="filterEmployees()" class="border rounded-lg px-4 py-2 outline-none focus:ring-2 focus:ring-primary-500">
+                            <option value="all">${t('all')} (${t('employeesFilterAssignment')})</option>
+                            <option value="general">${t('employeeGeneral')}</option>
+                            <option value="specific">${t('employeeSpecific')}</option>
+                        </select>
                     </div>
                     <div class="flex gap-2">
                         <button onclick="openBulkEmployeeModal()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition flex items-center gap-2">
@@ -2697,6 +2710,7 @@
                                     <th class="px-4 py-3 text-right text-sm font-medium text-gray-500">${t('employeeCode')}</th>
                                     <th class="px-4 py-3 text-right text-sm font-medium text-gray-500">${t('employeeName')}</th>
                                     <th class="px-4 py-3 text-right text-sm font-medium text-gray-500">${t('employeeType')}</th>
+                                    <th class="px-4 py-3 text-right text-sm font-medium text-gray-500">${t('employeeAssignmentScope')}</th>
                                     <th class="px-4 py-3 text-right text-sm font-medium text-gray-500">${t('projects')}</th>
                                     <th class="px-4 py-3 text-right text-sm font-medium text-gray-500">${t('phone')}</th>
                                     <th class="px-4 py-3 text-right text-sm font-medium text-gray-500">${t('status')}</th>
@@ -2706,7 +2720,7 @@
                             <tbody id="employees-list" class="divide-y">
                                 ${employees.length === 0 ? `
                                     <tr>
-                                        <td colspan="7" class="px-4 py-8 text-center text-gray-500">${t('noEmployees')}</td>
+                                        <td colspan="8" class="px-4 py-8 text-center text-gray-500">${t('noEmployees')}</td>
                                     </tr>
                                 ` : employees.map(emp => createEmployeeRow(emp, projects)).join('')}
                             </tbody>
@@ -2725,7 +2739,17 @@
     }
     
     function createEmployeeRow(employee, projects) {
-        const project = projects.find(p => p.id === employee.projectId);
+        const isGeneralDaily = employee.type === 'daily' && employee.assignmentMode === 'general';
+        const assignmentKey = isGeneralDaily ? 'general' : 'specific';
+        const assignedIds = isGeneralDaily && Array.isArray(employee.assignedProjectIds) && employee.assignedProjectIds.length > 0
+            ? employee.assignedProjectIds.filter(Boolean)
+            : (employee.projectId ? [employee.projectId] : []);
+        const sep = currentLanguage === 'ar' ? '، ' : ', ';
+        const projectsLabel = assignedIds.length === 0
+            ? '-'
+            : assignedIds.map(id => projects.find(p => p.id === id)?.name || id).join(sep);
+        const assignedIdsAttr = assignedIds.join(',');
+        
         const typeColors = {
             daily: 'bg-blue-100 text-blue-600',
             monthly: 'bg-purple-100 text-purple-600'
@@ -2735,13 +2759,18 @@
             inactive: 'bg-gray-100 text-gray-600',
             on_mission: 'bg-cyan-100 text-cyan-600'
         };
+        const assignmentColors = {
+            general: 'bg-amber-100 text-amber-800',
+            specific: 'bg-slate-100 text-slate-700'
+        };
         
         // تحديد عنوان الحقل حسب نوع الموظف
         const jobLabel = employee.type === 'monthly' ? t('position') : t('profession');
         
         return `
             <tr class="employee-row hover:bg-gray-50" data-id="${employee.id}" data-name="${employee.name}" 
-                data-project="${employee.projectId}" data-type="${employee.type}" data-status="${employee.status}">
+                data-project="${employee.projectId || ''}" data-assigned-projects="${assignedIdsAttr}"
+                data-assignment="${assignmentKey}" data-type="${employee.type}" data-status="${employee.status}">
                 <td class="px-4 py-3 text-sm font-mono">${employee.code}</td>
                 <td class="px-4 py-3">
                     <div class="font-medium">${employee.name}</div>
@@ -2750,7 +2779,10 @@
                 <td class="px-4 py-3">
                     <span class="px-2 py-1 text-xs rounded-full ${typeColors[employee.type]}">${t(employee.type)}</span>
                 </td>
-                <td class="px-4 py-3 text-sm">${project?.name || '-'}</td>
+                <td class="px-4 py-3">
+                    <span class="px-2 py-1 text-xs rounded-full ${assignmentColors[assignmentKey]}">${assignmentKey === 'general' ? t('employeeGeneral') : t('employeeSpecific')}</span>
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-800">${projectsLabel}</td>
                 <td class="px-4 py-3 text-sm">${employee.phone || '-'}</td>
                 <td class="px-4 py-3">
                     <span class="px-2 py-1 text-xs rounded-full ${statusColors[employee.status]}">${t(employee.status)}</span>
@@ -2828,20 +2860,28 @@
     }
     
     function filterEmployees() {
-        const search = document.getElementById('employees-search').value.toLowerCase();
-        const projectFilter = document.getElementById('employees-project-filter').value;
-        const typeFilter = document.getElementById('employees-type-filter').value;
+        const searchEl = document.getElementById('employees-search');
+        const search = (searchEl?.value || '').toLowerCase();
+        const projectFilter = document.getElementById('employees-project-filter')?.value || 'all';
+        const typeFilter = document.getElementById('employees-type-filter')?.value || 'all';
+        const assignmentFilter = document.getElementById('employees-assignment-filter')?.value || 'all';
         
         document.querySelectorAll('.employee-row').forEach(row => {
-            const name = row.dataset.name.toLowerCase();
-            const project = row.dataset.project;
+            const name = (row.dataset.name || '').toLowerCase();
+            const primaryProject = row.dataset.project || '';
+            const assignedCsv = row.dataset.assignedProjects || '';
+            const assignedList = assignedCsv ? assignedCsv.split(',').filter(Boolean) : [];
             const type = row.dataset.type;
+            const assignment = row.dataset.assignment || 'specific';
             
             const matchesSearch = name.includes(search);
-            const matchesProject = projectFilter === 'all' || project === projectFilter;
+            const matchesProject = projectFilter === 'all'
+                || primaryProject === projectFilter
+                || assignedList.includes(projectFilter);
             const matchesType = typeFilter === 'all' || type === typeFilter;
+            const matchesAssignment = assignmentFilter === 'all' || assignment === assignmentFilter;
             
-            row.style.display = matchesSearch && matchesProject && matchesType ? '' : 'none';
+            row.style.display = matchesSearch && matchesProject && matchesType && matchesAssignment ? '' : 'none';
         });
     }
     
@@ -5987,6 +6027,7 @@
             const collection = (activeTab === 'vehicles' || activeTab === 'vehicles_general') ? 'vehicleAttendance' : 'attendance';
             const batch = db.batch();
             const missionNotifications = []; // لتجميع الإشعارات
+            const resolvedDocIds = {}; // key -> docId للسجلات المضافة/المحدثة في الدفعة (لتنظيف الإشعارات بعد الحفظ)
             
             let hasBlocked = false;
             for (const [key, data] of Object.entries(attendanceChanges)) {
@@ -6020,6 +6061,7 @@
                             createdAt: firebase.firestore.FieldValue.serverTimestamp()
                         });
                     }
+                    resolvedDocIds[key] = docId;
                     
                     // إنشاء إشعار إذا كانت مهمة داخلية
                     if (data.status === 'onMission' && data.missionDetails?.type === 'internal' && data.missionNotification) {
@@ -6066,7 +6108,20 @@
             const projectLabel = window.currentAttendanceData?.projectName || selectedProject || '';
             logActivity('update', 'attendance', selectedProject || '', projectLabel, (currentLanguage === 'ar' ? 'حفظ جدول الحضور — ' : 'Saved attendance — ') + savedCount + (currentLanguage === 'ar' ? ' سجل' : ' record(s)'));
             
-            // إنشاء إشعارات المهمات
+            // إزالة إشعارات المهمة المرتبطة بسجلات حضور الموظفين (إلغاء مهمة، تغيير الحالة، إلخ.)
+            if (collection === 'attendance') {
+                for (const [key, data] of Object.entries(attendanceChanges)) {
+                    const existing = attendanceData[key];
+                    if (data._delete && existing?.id) {
+                        await deleteMissionNotificationsForAttendance(existing.id);
+                    }
+                }
+                for (const docId of Object.values(resolvedDocIds)) {
+                    await deleteMissionNotificationsForAttendance(docId);
+                }
+            }
+            
+            // إنشاء إشعارات المهمات (بعد التنظيف لتفادي التكرار أو إشارات قديمة)
             for (const mission of missionNotifications) {
                 await createMissionNotification(mission);
             }
@@ -6082,6 +6137,24 @@
         } finally {
             btn.disabled = false;
             btn.textContent = `💾 ${t('save')}`;
+        }
+    }
+    
+    async function deleteMissionNotificationsForAttendance(attendanceId) {
+        if (!attendanceId) return;
+        try {
+            const snap = await db.collection('notifications').where('attendanceId', '==', attendanceId).get();
+            if (snap.empty) return;
+            const delBatch = db.batch();
+            let ops = 0;
+            snap.forEach(doc => {
+                if (doc.data().type !== 'missionAttendance') return;
+                delBatch.delete(doc.ref);
+                ops++;
+            });
+            if (ops > 0) await delBatch.commit();
+        } catch (error) {
+            console.error('Error deleting mission notifications:', error);
         }
     }
     
@@ -7043,14 +7116,22 @@
             const empDoc = await db.collection('employees').doc(employeeId).get();
             const employee = { id: empDoc.id, ...empDoc.data() };
             
-            // جلب المشروع
-            const projDoc = await db.collection('projects').doc(employee.projectId).get();
-            const project = projDoc.exists ? projDoc.data() : null;
+            const projectsList = window.projectsListData || [];
+            const projectById = (id) => projectsList.find(p => p.id === id);
             
-            // جلب الحضور (فقط من المشروع الحالي للموظف) — توحيد التاريخ yyyy-mm-dd ليتطابق مع تقرير المشروع
+            // جلب المشروع الافتراضي (بطاقة الموظف)
+            const projDoc = employee.projectId ? await db.collection('projects').doc(employee.projectId).get() : null;
+            const project = projDoc?.exists ? projDoc.data() : null;
+            
+            const isGeneralDaily = employee.type === 'daily' && employee.assignmentMode === 'general';
+            const assignedProjectIds = Array.isArray(employee.assignedProjectIds) ? employee.assignedProjectIds : [];
+            const supervisorProjectFilter = (currentUserData?.role === 'supervisor' || currentUserData?.role === 'approver') && currentUserData.assignedProjects?.length > 0
+                ? currentUserData.assignedProjects
+                : null;
+            
+            // جلب كل سجلات حضور الموظف ثم التصفية (مخصص: مشروع واحد | عام: كل المشاريع المعيّنة له)
             const attSnap = await db.collection('attendance')
                 .where('employeeId', '==', employeeId)
-                .where('projectId', '==', employee.projectId)
                 .get();
             
             const fromNorm = toYyyyMmDd(fromDate) || fromDate;
@@ -7058,14 +7139,33 @@
             const attendance = [];
             attSnap.forEach(doc => {
                 const data = doc.data();
+                const pid = data.projectId;
+                if (isGeneralDaily) {
+                    if (!pid || !assignedProjectIds.includes(pid)) return;
+                } else {
+                    if (pid !== employee.projectId) return;
+                }
+                if (supervisorProjectFilter && !supervisorProjectFilter.includes(pid)) return;
                 const dateStr = toYyyyMmDd(data.date);
                 if (dateStr && dateStr >= fromNorm && dateStr <= toNorm) {
                     attendance.push({ id: doc.id, ...data, date: dateStr });
                 }
             });
             
-            // ترتيب حسب التاريخ
-            attendance.sort((a, b) => a.date.localeCompare(b.date));
+            const distinctProjectIds = [...new Set(attendance.map(a => a.projectId).filter(Boolean))];
+            const showProjectColumn = isGeneralDaily || distinctProjectIds.length > 1;
+            const generalProjectsLabel = isGeneralDaily && assignedProjectIds.length > 0
+                ? assignedProjectIds.map(id => projectById(id)?.name || id).join(currentLanguage === 'ar' ? '، ' : ', ')
+                : '';
+            
+            // ترتيب حسب التاريخ ثم المشروع (للعاميين قد يوجد أكثر من سجل في نفس اليوم)
+            attendance.sort((a, b) => {
+                const c = a.date.localeCompare(b.date);
+                if (c !== 0) return c;
+                const na = projectById(a.projectId)?.name || a.projectId || '';
+                const nb = projectById(b.projectId)?.name || b.projectId || '';
+                return na.localeCompare(nb);
+            });
             
             // حساب القيم الرقمية للحضور (لجميع السجلات بغض النظر عن الاعتماد)
             // المؤجور = 1، غير المؤجور = 0
@@ -7141,12 +7241,16 @@
                 }
             }
             
+            const headerProjectLine = isGeneralDaily
+                ? (currentLanguage === 'ar' ? 'موظف عام — ' : 'General — ') + (generalProjectsLabel || (project?.name || '-'))
+                : (project?.name || '-');
+            
             resultsContainer.innerHTML = `
                 <div class="card p-6">
                     <div class="flex items-center justify-between mb-6">
                         <div>
                             <h3 class="font-bold text-xl">${employee.name}</h3>
-                            <p class="text-gray-500">${employee.code} | ${t(employee.type)} | ${project?.name || '-'}</p>
+                            <p class="text-gray-500">${employee.code} | ${t(employee.type)} | ${headerProjectLine}</p>
                         </div>
                         <button onclick="printReportInNewTab()" class="no-print px-4 py-2 border rounded-lg hover:bg-gray-100">
                             🖨️ ${t('print')}
@@ -7211,6 +7315,7 @@
                             <thead class="bg-gray-50 sticky top-0">
                                 <tr>
                                     <th class="px-4 py-2 text-right">${t('date')}</th>
+                                    ${showProjectColumn ? `<th class="px-4 py-2 text-right">${t('projects')}</th>` : ''}
                                     <th class="px-4 py-2 text-right">${t('status')}</th>
                                     <th class="px-4 py-2 text-center">${currentLanguage === 'ar' ? 'الحضور (رقمي)' : 'Attendance (Numeric)'}</th>
                                     <th class="px-4 py-2 text-center">${t('approved')}</th>
@@ -7243,9 +7348,13 @@
                                         numericValue = 0; // الغياب (غير مؤجور) = 0
                                     }
                                     
+                                    const projectCell = showProjectColumn
+                                        ? `<td class="px-4 py-2 text-gray-700">${projectById(att.projectId)?.name || att.projectId || '-'}</td>`
+                                        : '';
                                     return `
                                         <tr class="hover:bg-gray-50">
                                             <td class="px-4 py-2">${formatDate(new Date(att.date))}</td>
+                                            ${projectCell}
                                             <td class="px-4 py-2">
                                                 <span class="inline-flex items-center gap-1">
                                                     ${statusInfo?.icon || ''} ${t(att.status)}
@@ -7263,7 +7372,7 @@
                                     `;
                                 }).join('')}
                                 <tr class="bg-gray-100 font-bold">
-                                    <td class="px-4 py-2" colspan="2">${currentLanguage === 'ar' ? 'الإجمالي' : 'Total'}</td>
+                                    <td class="px-4 py-2" colspan="${showProjectColumn ? 3 : 2}">${currentLanguage === 'ar' ? 'الإجمالي' : 'Total'}</td>
                                     <td class="px-4 py-2 text-center text-primary-600">${totalNumericDays.toFixed(2)}</td>
                                     <td class="px-4 py-2 text-center">
                                         ${attendance.filter(a => a.approved === true).length} ${t('approved')} / ${attendance.length} ${currentLanguage === 'ar' ? 'إجمالي' : 'total'}
