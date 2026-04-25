@@ -5537,6 +5537,13 @@
             const projectEl = document.getElementById('attendance-general-project');
             projectIdForRecord = projectEl?.value || '';
             if (!projectIdForRecord) {
+                // fallback: استخدم أول مشروع مخصص للعامي
+                const first = (data.generalProjectOptions && data.generalProjectOptions.length > 0)
+                    ? (data.generalProjectOptions[0]?.id || '')
+                    : '';
+                projectIdForRecord = first;
+            }
+            if (!projectIdForRecord) {
                 showToast(currentLanguage === 'ar' ? 'يرجى اختيار المشروع الذي عمل به اليوم' : 'Please select the project for this day', 'error');
                 return;
             }
@@ -5559,17 +5566,22 @@
         // إضافة تفاصيل الدوام الجزئي إذا كانت الحالة جزئي
         if (status === 'partial' && (data.effectiveType || data.type) !== 'vehicles') {
             const partialDetails = {};
+            const schedule = getProjectScheduleTimes(projectIdForRecord);
             
             const lateCheckbox = document.getElementById('partial-late');
             if (lateCheckbox?.checked) {
                 partialDetails.lateArrival = true;
                 partialDetails.arrivalTime = document.getElementById('partial-late-time')?.value || '';
+                // إذا كان متأخر فقط ولم يحدد وقت الانصراف، استخدم نهاية دوام المشروع
+                if (!partialDetails.leaveTime && schedule.endTime) partialDetails.leaveTime = schedule.endTime;
             }
             
             const earlyCheckbox = document.getElementById('partial-early');
             if (earlyCheckbox?.checked) {
                 partialDetails.earlyLeave = true;
                 partialDetails.leaveTime = document.getElementById('partial-early-time')?.value || '';
+                // إذا كان انصراف مبكر فقط ولم يحدد وقت الحضور، استخدم بداية دوام المشروع
+                if (!partialDetails.arrivalTime && schedule.startTime) partialDetails.arrivalTime = schedule.startTime;
             }
             
             const breakCheckbox = document.getElementById('partial-break');
@@ -6635,52 +6647,86 @@
         }
     }
     
+    function parseTimeToHours(t) {
+        const [h, m] = (t || '0:0').split(':').map(Number);
+        return (h || 0) + (m || 0) / 60;
+    }
+    
+    function hoursBetween(startTime, endTime) {
+        const start = parseTimeToHours(startTime);
+        const end = parseTimeToHours(endTime);
+        let diff = end - start;
+        // دعم الدوام/الشفت الذي يعبر منتصف الليل
+        if (diff < 0) diff += 24;
+        return Math.max(0, diff);
+    }
+    
+    function getProjectFullDayHours(projectId) {
+        const projects = window.projectsListData || [];
+        const project = projects.find(p => p?.id === projectId);
+        const start = project?.defaultSchedule?.startTime;
+        const end = project?.defaultSchedule?.endTime;
+        const hours = start && end ? hoursBetween(start, end) : 0;
+        // fallback إذا لم تتوفر البيانات أو كانت غير منطقية
+        if (!hours || !isFinite(hours) || hours <= 0 || hours > 24) return 8;
+        return hours;
+    }
+    
+    function getProjectScheduleTimes(projectId) {
+        const projects = window.projectsListData || [];
+        const project = projects.find(p => p?.id === projectId);
+        const start = project?.defaultSchedule?.startTime;
+        const end = project?.defaultSchedule?.endTime;
+        return { startTime: start || '', endTime: end || '' };
+    }
+    
     // حساب الأيام المعادلة للدوام الجزئي (من تفاصيل الوقت إن وجدت، وإلا 0.5 يوم)
+    // القيمة = ساعات الدوام الفعلية ÷ مدة دوام المشروع (بداية/نهاية الدوام)
     function getPartialEquivalentDays(record) {
         if (record.status !== 'partial' || !record.partialDetails) return 0.5;
         const pd = record.partialDetails;
-        const arrival = pd.arrivalTime;
-        const leave = pd.leaveTime;
+        const sched = getProjectScheduleTimes(record.projectId);
+        const arrival = pd.arrivalTime || (pd.earlyLeave ? (sched.startTime || '') : '');
+        const leave = pd.leaveTime || (pd.lateArrival ? (sched.endTime || '') : '');
         if (!arrival || !leave) return 0.5;
-        const parseTime = (t) => {
-            const [h, m] = (t || '0:0').split(':').map(Number);
-            return (h || 0) + (m || 0) / 60;
-        };
-        let hours = Math.max(0, parseTime(leave) - parseTime(arrival));
+        
+        const fullDayHours = getProjectFullDayHours(record.projectId);
+        let hours = hoursBetween(arrival, leave);
+        
         if (pd.breakOut && pd.breakOutTime && pd.breakInTime) {
-            const breakOut = parseTime(pd.breakOutTime);
-            const breakIn = parseTime(pd.breakInTime);
-            hours -= Math.max(0, breakIn - breakOut);
+            hours -= hoursBetween(pd.breakOutTime, pd.breakInTime);
         }
-        const dayFraction = Math.min(1, Math.max(0, hours / 8));
+        
+        const dayFraction = Math.min(1, Math.max(0, hours / fullDayHours));
         return Math.round(dayFraction * 100) / 100;
     }
     
+    // حساب الأيام المعادلة للشفتات بناءً على مدة دوام المشروع (بداية/نهاية الدوام)
     function getShiftEquivalentDays(record) {
         if (record.status !== 'shift') return 0.5;
         const list = record.shiftDetailsList || (record.shiftDetails ? [record.shiftDetails] : []);
         if (!list || list.length === 0) return 0.5;
-        const parseTime = (t) => {
-            const [h, m] = (t || '0:0').split(':').map(Number);
-            return (h || 0) + (m || 0) / 60;
-        };
+        
+        const fullDayHours = getProjectFullDayHours(record.projectId);
         let totalHours = 0;
         let allRemainderExcused = true;
+        
         list.forEach(sd => {
             const start = sd.startTime;
             const end = sd.endTime;
             if (!start || !end) return;
-            const hours = Math.max(0, parseTime(end) - parseTime(start));
-            totalHours += hours;
+            totalHours += hoursBetween(start, end);
             if (!sd.remainderExcused) allRemainderExcused = false;
         });
+        
         if (totalHours <= 0) return 0.5;
-        const fullDayHours = 8;
         let dayFraction = Math.min(1, Math.max(0, totalHours / fullDayHours));
+        
         // إذا كانت كل الأشفتة متبقية مؤجورة، يمكن اعتبار اليوم كاملاً
         if (allRemainderExcused && dayFraction < 1) {
             dayFraction = 1;
         }
+        
         return Math.round(dayFraction * 100) / 100;
     }
     
@@ -7139,7 +7185,7 @@
             const attendance = [];
             attSnap.forEach(doc => {
                 const data = doc.data();
-                const pid = data.projectId;
+                const pid = data.projectId || (isGeneralDaily ? (assignedProjectIds[0] || '') : '');
                 if (isGeneralDaily) {
                     if (!pid || !assignedProjectIds.includes(pid)) return;
                 } else {
@@ -7148,7 +7194,7 @@
                 if (supervisorProjectFilter && !supervisorProjectFilter.includes(pid)) return;
                 const dateStr = toYyyyMmDd(data.date);
                 if (dateStr && dateStr >= fromNorm && dateStr <= toNorm) {
-                    attendance.push({ id: doc.id, ...data, date: dateStr });
+                    attendance.push({ id: doc.id, ...data, projectId: pid, date: dateStr });
                 }
             });
             
