@@ -8362,7 +8362,7 @@
                     <div class="mb-6 flex items-center gap-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">${t('projects')}</label>
-                            <select id="wage-project-filter" onchange="loadWageManagementData()" class="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none">
+                            <select id="wage-project-filter" onchange="(document.getElementById('wage-tab-employees').classList.contains('active') ? loadWageManagementData() : loadVehicleWageManagementData())" class="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none">
                                 <option value="all">${t('all')}</option>
                                 ${availableProjects.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
                             </select>
@@ -8384,6 +8384,19 @@
                             <button onclick="(document.getElementById('wage-tab-employees').classList.contains('active') ? loadWageManagementData() : loadVehicleWageManagementData())" class="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">
                                 ${t('search')}
                             </button>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label id="wage-name-search-label" class="block text-sm font-medium text-gray-700 mb-1">${t('search')} ${t('employeeName')} / ${t('employeeCode')}</label>
+                        <div class="relative max-w-md">
+                            <input type="text" id="wage-name-search" autocomplete="off"
+                                   placeholder="${t('search')}..."
+                                   class="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                                   oninput="filterWageManagementTable()">
+                            <svg class="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                            </svg>
                         </div>
                     </div>
                     
@@ -8435,7 +8448,7 @@
                         const displayWage = monthWage ? monthWage.wage : currentWage;
                         
                         return `
-                            <tr class="border-b hover:bg-gray-50" data-employee-id="${emp.id}">
+                            <tr class="border-b hover:bg-gray-50 wage-employee-row" data-employee-id="${emp.id}" data-name="${(emp.name || '').toLowerCase()}" data-code="${(emp.code || '').toLowerCase()}">
                                 <td class="px-4 py-3 font-medium">${emp.name}</td>
                                 <td class="px-4 py-3">${project?.name || '-'}</td>
                                 <td class="px-4 py-3 text-center">${currentWage.toFixed(2)} ${currentLanguage === 'ar' ? 'IQD' : 'IQD'}</td>
@@ -8461,10 +8474,50 @@
         `;
     }
     
+    function clearWageNameSearch() {
+        const searchEl = document.getElementById('wage-name-search');
+        if (searchEl) searchEl.value = '';
+    }
+    
+    function updateWageSearchLabel() {
+        const labelEl = document.getElementById('wage-name-search-label');
+        const searchEl = document.getElementById('wage-name-search');
+        if (!labelEl) return;
+        const isEmployeesTab = document.getElementById('wage-tab-employees')?.classList.contains('active');
+        if (isEmployeesTab) {
+            labelEl.textContent = `${t('search')} ${t('employeeName')} / ${t('employeeCode')}`;
+            if (searchEl) searchEl.placeholder = `${t('search')} ${t('employeeName')} / ${t('employeeCode')}...`;
+        } else {
+            labelEl.textContent = `${t('search')} ${t('vehicleName')}`;
+            if (searchEl) searchEl.placeholder = `${t('search')} ${t('vehicleName')}...`;
+        }
+    }
+    
+    function filterWageManagementTable() {
+        const query = (document.getElementById('wage-name-search')?.value || '').trim().toLowerCase();
+        const isEmployeesTab = document.getElementById('wage-tab-employees')?.classList.contains('active');
+        
+        if (isEmployeesTab) {
+            document.querySelectorAll('.wage-employee-row').forEach(row => {
+                const name = row.dataset.name || '';
+                const code = row.dataset.code || '';
+                const matches = !query || name.includes(query) || code.includes(query);
+                row.style.display = matches ? '' : 'none';
+            });
+        } else {
+            document.querySelectorAll('.wage-vehicle-row').forEach(row => {
+                const name = row.dataset.name || '';
+                const matches = !query || name.includes(query);
+                row.style.display = matches ? '' : 'none';
+            });
+        }
+    }
+    
     async function loadWageManagementData() {
         const month = parseInt(document.getElementById('wage-month').value);
         const year = parseInt(document.getElementById('wage-year').value);
         const projectFilter = document.getElementById('wage-project-filter').value;
+        clearWageNameSearch();
         
         try {
             let employeesSnap;
@@ -8620,12 +8673,14 @@
             vehSection.classList.remove('hidden');
             empBtn.classList.remove('active');
             vehBtn.classList.add('active');
+            updateWageSearchLabel();
             loadVehicleWageManagementData();
         } else {
             vehSection.classList.add('hidden');
             empSection.classList.remove('hidden');
             vehBtn.classList.remove('active');
             empBtn.classList.add('active');
+            updateWageSearchLabel();
             loadWageManagementData();
         }
     }
@@ -8659,7 +8714,7 @@
                         const currentLabel = calcType === 'daily' ? t('vehicleDailyWage') : t('vehicleMonthlyWage');
                         
                         return `
-                            <tr class="border-b hover:bg-gray-50" data-vehicle-id="${veh.id}">
+                            <tr class="border-b hover:bg-gray-50 wage-vehicle-row" data-vehicle-id="${veh.id}" data-name="${(veh.name || '').toLowerCase()}">
                                 <td class="px-4 py-3 font-medium">${veh.name || ''}</td>
                                 <td class="px-4 py-3">${project?.name || '-'}</td>
                                 <td class="px-4 py-3 text-center">${t(calcType)}</td>
@@ -8690,6 +8745,7 @@
         const month = parseInt(document.getElementById('wage-month').value);
         const year = parseInt(document.getElementById('wage-year').value);
         const projectFilter = document.getElementById('wage-project-filter').value;
+        clearWageNameSearch();
         
         try {
             let availableProjectIds = [];
