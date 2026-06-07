@@ -548,6 +548,16 @@
                 
                 <hr class="my-4">
                 
+                <!-- للمدير والمشرف -->
+                <div id="wage-menu" class="hidden">
+                    <a href="#" onclick="showPage('monthlyWageManagement')" class="sidebar-item flex items-center gap-3 px-4 py-3 rounded-lg text-gray-700" data-page="monthlyWageManagement">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <span data-translate="monthlyWageManagement">إدارة الأجور الشهرية</span>
+                    </a>
+                </div>
+                
                 <!-- للمدير فقط -->
                 <div id="manager-menu" class="hidden">
                     <a href="#" onclick="showPage('users')" class="sidebar-item flex items-center gap-3 px-4 py-3 rounded-lg text-gray-700" data-page="users">
@@ -561,12 +571,6 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2v12m-6 0h6"></path>
                         </svg>
                         <span data-translate="activityLog">سجل النشاط</span>
-                    </a>
-                    <a href="#" onclick="showPage('monthlyWageManagement')" class="sidebar-item flex items-center gap-3 px-4 py-3 rounded-lg text-gray-700" data-page="monthlyWageManagement">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                        </svg>
-                        <span data-translate="monthlyWageManagement">إدارة الأجور الشهرية</span>
                     </a>
                 </div>
                 
@@ -748,6 +752,7 @@
             password: "كلمة المرور",
             login: "تسجيل الدخول",
             loginError: "خطأ في البريد الإلكتروني أو كلمة المرور",
+            accountDeactivated: "تم إلغاء تنشيط حسابك. تواصل مع المدير.",
             
             // الأزرار
             save: "حفظ",
@@ -1022,6 +1027,8 @@
             assignedProjects: "المشاريع المسندة",
             addUser: "إضافة مستخدم",
             editUser: "تعديل المستخدم",
+            userAccountStatus: "حالة الحساب",
+            cannotDeactivateSelf: "لا يمكنك إلغاء تنشيط حسابك الخاص",
             
             // لوحة التحكم
             activeProjects: "المشاريع النشطة",
@@ -1095,6 +1102,7 @@
             password: "Password",
             login: "Login",
             loginError: "Invalid email or password",
+            accountDeactivated: "Your account has been deactivated. Contact the administrator.",
             
             // Buttons
             save: "Save",
@@ -1369,6 +1377,8 @@
             assignedProjects: "Assigned Projects",
             addUser: "Add User",
             editUser: "Edit User",
+            userAccountStatus: "Account Status",
+            cannotDeactivateSelf: "You cannot deactivate your own account",
             
             // Dashboard
             activeProjects: "Active Projects",
@@ -1680,6 +1690,49 @@
         }
     }
     
+    function isUserAccountActive(userData) {
+        return userData && userData.status !== 'inactive';
+    }
+
+    function canManageWages() {
+        return currentUserData?.role === 'manager' || currentUserData?.role === 'supervisor';
+    }
+
+    function getSupervisorAllowedProjectIds() {
+        if (currentUserData?.role !== 'supervisor') return null;
+        return Array.isArray(currentUserData.assignedProjects) ? currentUserData.assignedProjects : [];
+    }
+
+    function canAccessEmployeeForWage(empData) {
+        if (currentUserData?.role === 'manager') return true;
+        if (currentUserData?.role !== 'supervisor') return false;
+        const allowed = getSupervisorAllowedProjectIds();
+        if (!allowed.length) return false;
+        if (allowed.includes(empData.projectId)) return true;
+        if (empData.assignmentMode === 'general' && Array.isArray(empData.assignedProjectIds)) {
+            return empData.assignedProjectIds.some(id => allowed.includes(id));
+        }
+        return false;
+    }
+
+    function canAccessVehicleForWage(vehData) {
+        if (currentUserData?.role === 'manager') return true;
+        if (currentUserData?.role !== 'supervisor') return false;
+        const allowed = getSupervisorAllowedProjectIds();
+        return allowed.length > 0 && allowed.includes(vehData.projectId);
+    }
+
+    function updateRoleMenus() {
+        const wageMenu = document.getElementById('wage-menu');
+        const managerMenu = document.getElementById('manager-menu');
+        if (wageMenu) {
+            wageMenu.classList.toggle('hidden', !canManageWages());
+        }
+        if (managerMenu) {
+            managerMenu.classList.toggle('hidden', currentUserData?.role !== 'manager');
+        }
+    }
+
     // تسجيل الدخول
     async function login(email, password) {
         try {
@@ -1691,9 +1744,17 @@
             if (!userDoc.exists) {
                 throw new Error('User data not found');
             }
+
+            const userData = userDoc.data();
+            if (!isUserAccountActive(userData)) {
+                await auth.signOut();
+                const err = new Error('Account deactivated');
+                err.code = 'auth/account-deactivated';
+                throw err;
+            }
             
             currentUser = userCredential.user;
-            currentUserData = userDoc.data();
+            currentUserData = userData;
             
             // تحديث الواجهة
             updateUIForUser();
@@ -1742,21 +1803,45 @@
         document.getElementById('user-name').textContent = name;
         document.getElementById('user-avatar').textContent = name.charAt(0);
         
-        // إظهار/إخفاء قائمة المدير
-        if (currentUserData.role === 'manager') {
-            document.getElementById('manager-menu').classList.remove('hidden');
-        } else {
-            document.getElementById('manager-menu').classList.add('hidden');
-        }
+        updateRoleMenus();
         
         // تحميل الإشعارات
         // بدء الاستماع للإشعارات في الوقت الفعلي
         startNotificationsListener();
+        startUserStatusListener();
+    }
+
+    function startUserStatusListener() {
+        if (userStatusUnsubscribe) {
+            userStatusUnsubscribe();
+            userStatusUnsubscribe = null;
+        }
+        if (!currentUser) return;
+
+        userStatusUnsubscribe = db.collection('users').doc(currentUser.uid).onSnapshot(doc => {
+            if (!doc.exists || !isUserAccountActive(doc.data())) {
+                showToast(t('accountDeactivated'), 'error');
+                logout().then(() => {
+                    const errorDiv = document.getElementById('login-error');
+                    errorDiv.textContent = t('accountDeactivated');
+                    errorDiv.classList.remove('hidden');
+                });
+                return;
+            }
+            currentUserData = doc.data();
+            const name = currentLanguage === 'ar' ? currentUserData.name : (currentUserData.nameEn || currentUserData.name);
+            document.getElementById('user-name').textContent = name;
+            document.getElementById('user-avatar').textContent = name.charAt(0);
+            updateRoleMenus();
+        }, error => {
+            console.error('Error listening to user status:', error);
+        });
     }
     
     // متغير لحفظ مرجع المستمع
     let notificationsUnsubscribe = null;
     let attendanceUnsubscribe = null;
+    let userStatusUnsubscribe = null;
     
     // بدء الاستماع للإشعارات في الوقت الفعلي
     function startNotificationsListener() {
@@ -1833,6 +1918,10 @@
         if (attendanceUnsubscribe) {
             attendanceUnsubscribe();
             attendanceUnsubscribe = null;
+        }
+        if (userStatusUnsubscribe) {
+            userStatusUnsubscribe();
+            userStatusUnsubscribe = null;
         }
     }
     
@@ -8277,11 +8366,17 @@
     }
     
     // ═══════════════════════════════════════════════════════════════════════
-    // إدارة الأجور الشهرية (للمدير فقط)
+    // إدارة أجور الموظفين اليوميين (للمدير والمشرف)
     // ═══════════════════════════════════════════════════════════════════════
     
     async function loadMonthlyWageManagement() {
         const container = document.getElementById('page-monthlyWageManagement');
+
+        if (!canManageWages()) {
+            container.innerHTML = `<p class="text-center py-8 text-red-500">${currentLanguage === 'ar' ? 'غير مصرح' : 'Unauthorized'}</p>`;
+            return;
+        }
+
         container.innerHTML = `<div class="text-center py-8"><div class="loader mx-auto"></div></div>`;
         
         try {
@@ -8320,15 +8415,12 @@
             const employees = [];
             employeesSnap.forEach(doc => {
                 const data = doc.data();
-                // للمشرف: التأكد من أن الموظف ينتمي للمشاريع المسندة فقط
-                if (currentUserData.role === 'supervisor' && currentUserData.assignedProjects && currentUserData.assignedProjects.length > 0) {
-                    if (currentUserData.assignedProjects.includes(data.projectId)) {
-                        employees.push({ id: doc.id, ...data });
-                    }
-                } else {
+                if (canAccessEmployeeForWage(data)) {
                     employees.push({ id: doc.id, ...data });
                 }
             });
+
+            window.projectsListData = availableProjects;
             
             // ترتيب الموظفين حسب المشروع ثم الاسم
             employees.sort((a, b) => {
@@ -8575,12 +8667,13 @@
             const employees = [];
             employeesSnap.forEach(doc => {
                 const data = doc.data();
-                // تطبيق فلتر المشروع على البيانات المحملة
-                if (projectFilter === 'all' || data.projectId === projectFilter) {
-                    if (availableProjectIds.includes(data.projectId)) {
-                        employees.push({ id: doc.id, ...data });
+                if (!canAccessEmployeeForWage(data)) return;
+                if (projectFilter !== 'all' && data.projectId !== projectFilter) {
+                    if (!(data.assignmentMode === 'general' && Array.isArray(data.assignedProjectIds) && data.assignedProjectIds.includes(projectFilter))) {
+                        return;
                     }
                 }
+                employees.push({ id: doc.id, ...data });
             });
             
             employees.sort((a, b) => {
@@ -8615,6 +8708,11 @@
             }
             
             const empData = empDoc.data();
+            if (!canAccessEmployeeForWage(empData)) {
+                showToast(currentLanguage === 'ar' ? 'غير مصرح' : 'Unauthorized', 'error');
+                return;
+            }
+
             const wageHistory = empData.wageHistory || [];
             
             // البحث عن سجل موجود لهذا الشهر
@@ -8650,6 +8748,7 @@
             }
             
             await db.collection('employees').doc(employeeId).update(updateData);
+            logActivity('update', 'employee', employeeId, empData.name, currentLanguage === 'ar' ? 'تحديث أجر يومي' : 'Daily wage updated');
             
             showToast(t('saved'), 'success');
             
@@ -8793,11 +8892,9 @@
             const vehicles = [];
             vehiclesSnap.forEach(doc => {
                 const data = doc.data();
-                if (projectFilter === 'all' || data.projectId === projectFilter) {
-                    if (availableProjectIds.includes(data.projectId)) {
-                        vehicles.push({ id: doc.id, ...data });
-                    }
-                }
+                if (!canAccessVehicleForWage(data)) return;
+                if (projectFilter !== 'all' && data.projectId !== projectFilter) return;
+                vehicles.push({ id: doc.id, ...data });
             });
             
             vehicles.sort((a, b) => {
@@ -8832,6 +8929,11 @@
             }
             
             const vehData = vehDoc.data();
+            if (!canAccessVehicleForWage(vehData)) {
+                showToast(currentLanguage === 'ar' ? 'غير مصرح' : 'Unauthorized', 'error');
+                return;
+            }
+
             const wageHistory = vehData.wageHistory || [];
             const existingIndex = wageHistory.findIndex(w => w.month === month && w.year === year);
             
@@ -8924,15 +9026,21 @@
                             return p?.name;
                         }).filter(Boolean).join(', ') || t('all');
                         
+                        const userStatus = user.status || 'active';
                         return `
-                            <div class="card p-5">
+                            <div class="card p-5 ${userStatus === 'inactive' ? 'opacity-75' : ''}">
                                 <div class="flex items-start justify-between mb-3">
                                     <div class="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center">
                                         <span class="text-primary-600 font-bold text-lg">${user.name?.charAt(0) || 'U'}</span>
                                     </div>
-                                    <span class="px-2 py-1 text-xs rounded-full ${user.role === 'manager' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}">
-                                        ${t(user.role)}
-                                    </span>
+                                    <div class="flex flex-col items-end gap-1">
+                                        <span class="px-2 py-1 text-xs rounded-full ${user.role === 'manager' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}">
+                                            ${t(user.role)}
+                                        </span>
+                                        <span class="px-2 py-1 text-xs rounded-full ${userStatus === 'active' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600'}">
+                                            ${t(userStatus)}
+                                        </span>
+                                    </div>
                                 </div>
                                 
                                 <h3 class="font-bold">${user.name}</h3>
@@ -9045,6 +9153,17 @@
                         `).join('')}
                     </div>
                 </div>
+
+                ${user ? `
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">${t('userAccountStatus')} *</label>
+                    <select id="user-status" required class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" ${user.id === currentUser.uid ? 'disabled' : ''}>
+                        <option value="active" ${(user.status || 'active') === 'active' ? 'selected' : ''}>${t('active')}</option>
+                        <option value="inactive" ${user.status === 'inactive' ? 'selected' : ''}>${t('inactive')}</option>
+                    </select>
+                    ${user.id === currentUser.uid ? `<p class="text-xs text-gray-500 mt-1">${t('cannotDeactivateSelf')}</p>` : ''}
+                </div>
+                ` : ''}
             </form>
         `;
         
@@ -9078,6 +9197,7 @@
         const nameEl = form.querySelector('#user-name');
         const emailEl = form.querySelector('#user-email');
         const roleEl = form.querySelector('#user-role');
+        const statusEl = form.querySelector('#user-status');
         
         // تحقق من وجود العناصر
         if (!nameEl || !emailEl || !roleEl) {
@@ -9090,11 +9210,17 @@
         const name = (nameEl.value || '').trim();
         const email = (emailEl.value || '').trim();
         const role = roleEl.value || 'supervisor';
+        const status = statusEl?.value || 'active';
         const assignedProjects = role === 'supervisor' ? 
             Array.from(document.querySelectorAll('input[name="user-projects"]:checked')).map(cb => cb.value) : null;
         
         if (!name || !email) {
             showToast(t('required'), 'error');
+            return;
+        }
+
+        if (id && id === currentUser.uid && status === 'inactive') {
+            showToast(t('cannotDeactivateSelf'), 'error');
             return;
         }
         
@@ -9105,9 +9231,13 @@
                     name,
                     role,
                     assignedProjects,
+                    status,
                     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
-                logActivity('update', 'user', id, name, currentLanguage === 'ar' ? 'تعديل مستخدم' : 'User updated');
+                const statusNote = status === 'inactive'
+                    ? (currentLanguage === 'ar' ? 'إلغاء تنشيط الحساب' : 'Account deactivated')
+                    : (currentLanguage === 'ar' ? 'تعديل مستخدم' : 'User updated');
+                logActivity('update', 'user', id, name, statusNote);
             } else {
                 // إضافة - إنشاء حساب في Auth أولاً
                 const passwordEl = document.getElementById('user-password');
@@ -9188,7 +9318,7 @@
             generalHowToReports: 'تقارير العاميين: تعرض المشاريع التي يوجد فيها حضور ضمن الفترة فقط، وتوضح أيام العمل والأجر لكل مشروع، مع الإجمالي. للآليات يظهر نوع الاحتساب (يومي/شهري) والأجر المعتمد/المحتمل.',
             users: 'المستخدمون (للمدير): إضافة وتعديل مستخدمين وأدوارهم والمشاريع المسندة.',
             activityLog: 'سجل النشاط (للمدير): سجل بالعمليات (إضافة، تعديل، حذف) مع اسم المستخدم والوقت.',
-            wageMgmt: 'إدارة الأجور الشهرية (للمدير): إعداد أجور الموظفين الشهرية.',
+            wageMgmt: 'إدارة أجور الموظفين اليوميين (للمدير والمشرف): تعيين الأجر اليومي لكل شهر؛ المشرف يرى مشاريعه المسندة فقط.',
             settings: 'الإعدادات: اللغة، تغيير كلمة المرور، معلومات الحساب.',
             windowsTitle: 'الواجهات والنوافذ',
             windowsAdd: 'نوافذ الإضافة/التعديل: تظهر عند "إضافة" أو "تعديل" للمشاريع والموظفين والآليات؛ تحتوي حقول النموذج وأزرار حفظ وإلغاء.',
@@ -9197,7 +9327,7 @@
             windowsBulk: 'نافذة التسجيل الجماعي: لتسجيل حضور واحد لعدة أيام أو عدة موظفين/آليات دفعة واحدة.',
             rolesTitle: 'القيود على المستخدمين',
             roleManager: 'المدير: يرى كل المشاريع والموظفين والآليات؛ يضيف ويعدّل ويحذف؛ يعتمد ويلغي الاعتماد؛ يدير المستخدمين وسجل النشاط والأجور الشهرية.',
-            roleSupervisor: 'المشرف: يرى فقط المشاريع والموظفين والآليات المسندة إليه (المشاريع المسندة)؛ يسجّل الحضور ويعدّله خلال 24 ساعة من الإدخال؛ لا يستطيع تعديل سجل معتمد إلا إذا كان المدير.',
+            roleSupervisor: 'المشرف: يرى فقط المشاريع والموظفين والآليات المسندة إليه؛ يسجّل الحضور ويعدّله خلال 24 ساعة؛ يدير أجور الموظفين اليوميين والآليات في مشاريعه؛ لا يستطيع تعديل سجل معتمد إلا إذا كان المدير.',
             roleApprover: 'المعتمد: يرى المشاريع المسندة فقط؛ يعتمد الدوام (اعتماد كامل أو جزئي)؛ لا يسجّل ولا يعدّل الحضور.',
             rule24h: 'قيد 24 ساعة: بعد مرور 24 ساعة من تسجيل الحضور، لا يستطيع المشرف تعديل السجل؛ التعديل للمدير فقط. السجلات المعتمدة لا يعدّلها إلا المدير.',
             partialTitle: 'الحضور والدوام الجزئي',
@@ -9234,7 +9364,7 @@
             generalHowToReports: 'General wages reports: show only projects that have attendance in the selected period, with days and wages per project and totals. Vehicles include calculation type (daily/monthly) and approved/potential wages.',
             users: 'Users (Manager): Add and edit users, roles, and assigned projects.',
             activityLog: 'Activity Log (Manager): Log of actions (add, edit, delete) with user and time.',
-            wageMgmt: 'Monthly Wage Management (Manager): Set employee monthly wages.',
+            wageMgmt: 'Daily Employees Wage Management (Manager & Supervisor): Set daily wage per month; supervisors see assigned projects only.',
             settings: 'Settings: Language, change password, account info.',
             windowsTitle: 'Interfaces and Windows',
             windowsAdd: 'Add/Edit modals: Shown when adding or editing projects, employees, or vehicles; contain form fields and save/cancel.',
@@ -9243,7 +9373,7 @@
             windowsBulk: 'Bulk entry window: Record one status for multiple days or multiple employees/vehicles at once.',
             rolesTitle: 'User Roles and Restrictions',
             roleManager: 'Manager: Sees all projects, employees, vehicles; add, edit, delete; approve and unapprove; manage users, activity log, wages.',
-            roleSupervisor: 'Supervisor: Sees only assigned projects and their employees/vehicles; records and edits attendance within 24 hours of entry; cannot edit approved records (only manager can).',
+            roleSupervisor: 'Supervisor: Sees only assigned projects and their employees/vehicles; records and edits attendance within 24 hours; manages daily employee and vehicle wages for assigned projects; cannot edit approved records (only manager can).',
             roleApprover: 'Approver: Sees only assigned projects; approves attendance (full or partial); does not record or edit attendance.',
             rule24h: '24-hour rule: After 24 hours from recording attendance, supervisor cannot edit; only manager can. Only manager can edit approved records.',
             partialTitle: 'Attendance and Partial Work',
@@ -9507,8 +9637,20 @@
                     try {
                         const userDoc = await db.collection('users').doc(user.uid).get();
                         if (userDoc.exists) {
+                            const userData = userDoc.data();
+                            if (!isUserAccountActive(userData)) {
+                                await auth.signOut();
+                                currentUser = null;
+                                currentUserData = null;
+                                document.getElementById('app').classList.add('hidden');
+                                document.getElementById('login-screen').classList.remove('hidden');
+                                const errorDiv = document.getElementById('login-error');
+                                errorDiv.textContent = t('accountDeactivated');
+                                errorDiv.classList.remove('hidden');
+                                return;
+                            }
                             currentUser = user;
-                            currentUserData = userDoc.data();
+                            currentUserData = userData;
                             updateUIForUser();
                             document.getElementById('app').classList.remove('hidden');
                             showPage('dashboard');
@@ -9554,7 +9696,7 @@
         try {
             await login(email, password);
         } catch (error) {
-            errorDiv.textContent = t('loginError');
+            errorDiv.textContent = error.code === 'auth/account-deactivated' ? t('accountDeactivated') : t('loginError');
             errorDiv.classList.remove('hidden');
         } finally {
             spinner.classList.add('hidden');
