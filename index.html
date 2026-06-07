@@ -290,9 +290,19 @@
             }
             #report-results table {
                 font-size: 0.7rem !important;
+                width: max-content !important;
+                min-width: 100%;
             }
             #report-results th, #report-results td {
                 padding: 3px 4px !important;
+            }
+            #report-results .overflow-x-auto,
+            #report-results [class*="overflow-x"],
+            #report-results [class*="overflow-y"],
+            #report-results .max-h-96 {
+                overflow: visible !important;
+                max-height: none !important;
+                max-width: none !important;
             }
             .no-print {
                 display: none !important;
@@ -6396,13 +6406,107 @@
     // التقارير
     // ═══════════════════════════════════════════════════════════════════════
     
+    function getReportPrintTitle() {
+        const h3 = document.querySelector('#report-results h3');
+        return (h3?.textContent || '').trim() || t('reports');
+    }
+
+    function getReportPrintStyles(isRtl) {
+        const origin = isRtl ? 'top right' : 'top left';
+        return `
+            @page { size: A4 landscape; margin: 8mm; }
+            * { box-sizing: border-box; }
+            html, body {
+                margin: 0;
+                padding: 0;
+                background: #fff;
+                overflow: visible !important;
+                width: 100%;
+                height: auto !important;
+            }
+            #print-root {
+                overflow: visible !important;
+                max-width: none !important;
+                transform-origin: ${origin};
+                padding: 10px;
+            }
+            #print-root .report-print-table-wrap,
+            #print-root .overflow-x-auto,
+            #print-root [class*="overflow-x"],
+            #print-root [class*="overflow-y"],
+            #print-root .max-h-96,
+            #print-root .report-print-no-max-h {
+                overflow: visible !important;
+                max-height: none !important;
+                max-width: none !important;
+                width: auto !important;
+            }
+            #print-root .card {
+                box-shadow: none !important;
+                border: 1px solid #e5e7eb;
+                padding: 8px;
+                background: #fff;
+                overflow: visible !important;
+            }
+            #print-root table {
+                width: max-content !important;
+                min-width: 0 !important;
+                border-collapse: collapse;
+                font-size: 0.62rem;
+                table-layout: auto;
+            }
+            #print-root th, #print-root td {
+                padding: 2px 4px !important;
+                border: 1px solid #e5e7eb;
+                white-space: nowrap;
+            }
+            #print-root thead { background: #f9fafb; }
+            #print-root .text-green-700 { color: #15803d; }
+            #print-root .text-blue-700 { color: #1d4ed8; }
+            #print-root .bg-gray-50 { background: #f9fafb; }
+            #print-root .bg-gray-100 { background: #f3f4f6; }
+            #print-root .font-bold { font-weight: 700; }
+            #print-root .font-semibold { font-weight: 600; }
+            #print-root .hidden, #print-root .no-print { display: none !important; }
+            @media print {
+                html, body {
+                    overflow: visible !important;
+                    height: auto !important;
+                    min-height: 0 !important;
+                    -webkit-print-color-adjust: exact;
+                    print-color-adjust: exact;
+                }
+                #print-root {
+                    overflow: visible !important;
+                    page-break-inside: auto;
+                    transform-origin: ${origin} !important;
+                }
+                #print-root table {
+                    page-break-inside: auto;
+                }
+                #print-root tr {
+                    page-break-inside: avoid;
+                    page-break-after: auto;
+                }
+            }
+        `;
+    }
+
+    function prepareReportPrintHtml(html) {
+        return html
+            .replace(/onclick="[^"]*"/gi, '')
+            .replace(/class="[^"]*no-print[^"]*"/gi, 'class="hidden"')
+            .replace(/\boverflow-x-auto\b/g, 'report-print-table-wrap')
+            .replace(/\bmax-h-96\b/g, 'report-print-no-max-h');
+    }
+
     function printReportInNewTab() {
         const resultsEl = document.getElementById('report-results');
         if (!resultsEl || !resultsEl.innerHTML.trim()) {
             showToast(t('error') || 'Error', 'error');
             return;
         }
-        const content = resultsEl.innerHTML.replace(/onclick="[^"]*"/gi, '').replace(/class="[^"]*no-print[^"]*"/gi, 'class="hidden"');
+        const content = prepareReportPrintHtml(resultsEl.innerHTML);
         const w = window.open('', '_blank');
         if (!w) {
             showToast(t('error') || 'Error', 'error');
@@ -6411,9 +6515,65 @@
         const isRtl = document.documentElement.getAttribute('dir') === 'rtl' || document.documentElement.lang === 'ar';
         const dir = isRtl ? 'rtl' : 'ltr';
         const lang = document.documentElement.lang || 'ar';
-        const title = t('projectReport') + ' / ' + t('employeeReport');
-        const prefix = '<!DOCTYPE html><html dir="' + dir + '" lang="' + lang + '"><head><meta charset="utf-8"><title>' + title + '</title><script src="https://cdn.tailwindcss.com"><\/script><style>@page{size:A4 landscape;margin:10mm;}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}table{font-size:0.7rem!important;}th,td{padding:3px 4px!important;}}</style></head><body class="p-4 bg-gray-100"><div class="max-w-full mx-auto bg-white rounded-xl shadow p-4">';
-        const suffix = '</div><script>window.onload=function(){setTimeout(function(){window.print();},600);};<\/script></body></html>';
+        const title = getReportPrintTitle();
+        const styles = getReportPrintStyles(isRtl);
+        const prefix = `<!DOCTYPE html><html dir="${dir}" lang="${lang}"><head><meta charset="utf-8"><title>${title.replace(/</g, '&lt;')}</title><style>${styles}</style></head><body><div id="print-root">`;
+        const suffix = `</div><script>
+            function getPrintableWidthPx() {
+                var printableMm = 297 - 16;
+                return Math.floor(printableMm * 96 / 25.4);
+            }
+            function resetReportPrintScale() {
+                var root = document.getElementById('print-root');
+                if (!root) return;
+                root.style.zoom = '';
+                root.style.transform = '';
+                root.style.width = '';
+                root.style.height = '';
+                root.style.marginBottom = '';
+                var table = root.querySelector('table');
+                if (table) {
+                    table.style.fontSize = '';
+                    table.style.width = '';
+                }
+                root.querySelectorAll('th, td').forEach(function(cell) {
+                    cell.style.padding = '';
+                });
+            }
+            function fitReportPrintScale() {
+                resetReportPrintScale();
+                var root = document.getElementById('print-root');
+                if (!root) return 1;
+                var table = root.querySelector('table');
+                if (!table) return 1;
+                var available = getPrintableWidthPx();
+                var needed = Math.max(table.scrollWidth, table.offsetWidth);
+                if (needed <= available) return 1;
+                var fontSize = parseFloat(window.getComputedStyle(table).fontSize) || 10;
+                while (needed > available && fontSize > 5.5) {
+                    fontSize -= 0.5;
+                    table.style.fontSize = fontSize + 'px';
+                    root.querySelectorAll('th, td').forEach(function(cell) {
+                        cell.style.padding = '1px 3px';
+                    });
+                    needed = Math.max(table.scrollWidth, table.offsetWidth);
+                }
+                if (needed <= available) return 1;
+                var scale = available / needed;
+                if (scale < 0.3) scale = 0.3;
+                root.style.zoom = scale;
+                root.style.width = needed + 'px';
+                return scale;
+            }
+            window.addEventListener('beforeprint', fitReportPrintScale);
+            window.addEventListener('afterprint', resetReportPrintScale);
+            window.onload = function() {
+                setTimeout(function() {
+                    fitReportPrintScale();
+                    window.print();
+                }, 400);
+            };
+        <\/script></body></html>`;
         w.document.write(prefix + content + suffix);
         w.document.close();
     }
