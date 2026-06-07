@@ -1074,6 +1074,12 @@
             month: "الشهر",
             year: "السنة",
             wageAmount: "مبلغ الأجر",
+            wageForMonth: "أجر",
+            wageDefault: "افتراضي",
+            wageNotRecorded: "غير مسجّل",
+            viewEditWages: "سجل الأجور",
+            addWageMonth: "إضافة شهر",
+            wagePeriod: "الفترة",
             totalSalary: "إجمالي الراتب",
             salaryCalculation: "حساب الراتب",
             vehicleCalculationType: "نوع احتساب الآلية",
@@ -1424,6 +1430,12 @@
             month: "Month",
             year: "Year",
             wageAmount: "Wage Amount",
+            wageForMonth: "Wage for",
+            wageDefault: "Default",
+            wageNotRecorded: "Not recorded",
+            viewEditWages: "Wage history",
+            addWageMonth: "Add month",
+            wagePeriod: "Period",
             totalSalary: "Total Salary",
             salaryCalculation: "Salary Calculation",
             vehicleCalculationType: "Vehicle Calculation Type",
@@ -1635,6 +1647,7 @@
         // إزالة جميع classes العرض لإعادة التعيين
         modalContent.classList.remove('max-w-5xl', 'max-w-6xl', 'max-w-7xl');
         document.getElementById('modal').classList.remove('show');
+        window._wageHistoryModal = null;
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -8368,6 +8381,73 @@
     // ═══════════════════════════════════════════════════════════════════════
     // إدارة أجور الموظفين اليوميين (للمدير والمشرف)
     // ═══════════════════════════════════════════════════════════════════════
+
+    function getWageMonthNames() {
+        return currentLanguage === 'ar'
+            ? ['', 'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر']
+            : ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    }
+
+    function getWageColumnLabel(month, year) {
+        const names = getWageMonthNames();
+        return `${t('wageForMonth')} ${names[month]} ${year}`;
+    }
+
+    function getEmployeeWageForMonth(emp, month, year) {
+        const wageHistory = emp.wageHistory || [];
+        const monthWage = wageHistory.find(w => w.month === month && w.year === year);
+        if (monthWage) {
+            return { wage: monthWage.wage, isRecorded: true };
+        }
+        if (emp.dailyWage != null && emp.dailyWage !== '') {
+            return { wage: Number(emp.dailyWage), isRecorded: false, isDefault: true };
+        }
+        return { wage: null, isRecorded: false, isDefault: false };
+    }
+
+    function getVehicleWageForMonth(veh, month, year) {
+        const wageHistory = veh.wageHistory || [];
+        const monthWage = wageHistory.find(w => w.month === month && w.year === year);
+        const calcType = veh.calculationType || 'daily';
+        const baseWage = calcType === 'daily' ? (veh.dailyWage || 0) : (veh.monthlyWage || 0);
+        if (monthWage) {
+            return { wage: monthWage.wage, isRecorded: true };
+        }
+        if (baseWage > 0) {
+            return { wage: baseWage, isRecorded: false, isDefault: true };
+        }
+        return { wage: null, isRecorded: false, isDefault: false };
+    }
+
+    function formatWageBadge(isRecorded, isDefault) {
+        if (isRecorded) return '';
+        if (isDefault) {
+            return `<span class="mr-1 px-1.5 py-0.5 text-xs rounded bg-amber-100 text-amber-700">${t('wageDefault')}</span>`;
+        }
+        return `<span class="mr-1 px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-500">${t('wageNotRecorded')}</span>`;
+    }
+
+    function formatWagePeriodCode(month, year) {
+        return `${String(month).padStart(2, '0')}-${year}`;
+    }
+
+    function formatWageAmount(wage) {
+        if (wage == null || isNaN(wage)) return '—';
+        return `${Number(wage).toFixed(2)} ${currentLanguage === 'ar' ? 'IQD' : 'IQD'}`;
+    }
+
+    function reloadActiveWageTab() {
+        if (!document.getElementById('wage-month')) return;
+        if (document.getElementById('wage-tab-employees')?.classList.contains('active')) {
+            loadWageManagementData();
+        } else {
+            loadVehicleWageManagementData();
+        }
+    }
+
+    function onWageFiltersChange() {
+        reloadActiveWageTab();
+    }
     
     async function loadMonthlyWageManagement() {
         const container = document.getElementById('page-monthlyWageManagement');
@@ -8451,17 +8531,17 @@
                         </button>
                     </div>
                     
-                    <div class="mb-6 flex items-center gap-4">
+                    <div class="mb-6 flex flex-wrap items-end gap-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">${t('projects')}</label>
-                            <select id="wage-project-filter" onchange="(document.getElementById('wage-tab-employees').classList.contains('active') ? loadWageManagementData() : loadVehicleWageManagementData())" class="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none">
+                            <select id="wage-project-filter" onchange="onWageFiltersChange()" class="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none">
                                 <option value="all">${t('all')}</option>
                                 ${availableProjects.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
                             </select>
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">${t('month')}</label>
-                            <select id="wage-month" class="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none">
+                            <select id="wage-month" onchange="onWageFiltersChange()" class="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none">
                                 ${Array.from({ length: 12 }, (_, i) => i + 1).map(m => 
                                     `<option value="${m}" ${m === currentMonth ? 'selected' : ''}>${monthNames[m]}</option>`
                                 ).join('')}
@@ -8470,12 +8550,8 @@
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">${t('year')}</label>
                             <input type="number" id="wage-year" value="${currentYear}" min="2020" max="2100"
+                                   onchange="onWageFiltersChange()"
                                    class="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none">
-                        </div>
-                        <div class="flex items-end">
-                            <button onclick="(document.getElementById('wage-tab-employees').classList.contains('active') ? loadWageManagementData() : loadVehicleWageManagementData())" class="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">
-                                ${t('search')}
-                            </button>
                         </div>
                     </div>
                     
@@ -8516,9 +8592,7 @@
             return `<p class="text-gray-500 text-center py-8">${currentLanguage === 'ar' ? 'لا توجد موظفين يوميين' : 'No daily employees'}</p>`;
         }
         
-        const monthNames = currentLanguage === 'ar' 
-            ? ['', 'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر']
-            : ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        const wageColumnLabel = getWageColumnLabel(month, year);
         
         return `
             <table class="w-full text-sm border-collapse">
@@ -8526,36 +8600,30 @@
                     <tr class="bg-gray-50 border-b">
                         <th class="px-4 py-3 text-right font-medium">${t('employeeName')}</th>
                         <th class="px-4 py-3 text-right font-medium">${t('projects')}</th>
-                        <th class="px-4 py-3 text-center font-medium">${t('currentDailyWage')}</th>
-                        <th class="px-4 py-3 text-center font-medium">${t('wageAmount')} (${currentLanguage === 'ar' ? 'IQD' : 'IQD'})</th>
+                        <th class="px-4 py-3 text-center font-medium">${wageColumnLabel}</th>
                         <th class="px-4 py-3 text-center font-medium">${t('actions')}</th>
                     </tr>
                 </thead>
                 <tbody>
                     ${employees.map(emp => {
                         const project = window.projectsListData?.find(p => p.id === emp.projectId);
-                        const currentWage = emp.dailyWage || 0;
-                        const wageHistory = emp.wageHistory || [];
-                        const monthWage = wageHistory.find(w => w.month === month && w.year === year);
-                        const displayWage = monthWage ? monthWage.wage : currentWage;
+                        const { wage, isRecorded, isDefault } = getEmployeeWageForMonth(emp, month, year);
+                        const badge = formatWageBadge(isRecorded, isDefault);
                         
                         return `
                             <tr class="border-b hover:bg-gray-50 wage-employee-row" data-employee-id="${emp.id}" data-name="${(emp.name || '').toLowerCase()}" data-code="${(emp.code || '').toLowerCase()}">
                                 <td class="px-4 py-3 font-medium">${emp.name}</td>
                                 <td class="px-4 py-3">${project?.name || '-'}</td>
-                                <td class="px-4 py-3 text-center">${currentWage.toFixed(2)} ${currentLanguage === 'ar' ? 'IQD' : 'IQD'}</td>
                                 <td class="px-4 py-3 text-center">
-                                    <input type="number" 
-                                           id="wage-input-${emp.id}" 
-                                           step="0.01" 
-                                           min="0" 
-                                           value="${displayWage.toFixed(2)}"
-                                           class="w-32 px-3 py-1 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-center">
+                                    <span class="inline-flex items-center justify-center gap-1 flex-wrap">
+                                        ${badge}
+                                        <span class="font-medium">${formatWageAmount(wage)}</span>
+                                    </span>
                                 </td>
                                 <td class="px-4 py-3 text-center">
-                                    <button onclick="saveMonthlyWage('${emp.id}', ${month}, ${year})" 
-                                            class="px-3 py-1 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm">
-                                        ${t('save')}
+                                    <button onclick="openEmployeeWageHistoryModal('${emp.id}')" 
+                                            class="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg transition text-sm inline-flex items-center gap-1">
+                                        📋 ${t('viewEditWages')}
                                     </button>
                                 </td>
                             </tr>
@@ -8690,8 +8758,118 @@
         }
     }
     
-    async function saveMonthlyWage(employeeId, month, year) {
-        const wageInput = document.getElementById(`wage-input-${employeeId}`);
+    async function openEmployeeWageHistoryModal(employeeId) {
+        try {
+            const doc = await db.collection('employees').doc(employeeId).get();
+            if (!doc.exists) {
+                showToast(t('error'), 'error');
+                return;
+            }
+            const emp = { id: doc.id, ...doc.data() };
+            if (!canAccessEmployeeForWage(emp)) {
+                showToast(currentLanguage === 'ar' ? 'غير مصرح' : 'Unauthorized', 'error');
+                return;
+            }
+
+            window._wageHistoryModal = { type: 'employee', id: employeeId };
+            const project = window.projectsListData?.find(p => p.id === emp.projectId);
+            const monthNames = getWageMonthNames();
+            const wageHistory = [...(emp.wageHistory || [])].sort((a, b) => {
+                if (a.year !== b.year) return b.year - a.year;
+                return b.month - a.month;
+            });
+            const now = new Date();
+            const currentMonth = now.getMonth() + 1;
+            const currentYear = now.getFullYear();
+
+            const historyRows = wageHistory.length === 0
+                ? `<tr><td colspan="5" class="px-4 py-6 text-center text-gray-500">${currentLanguage === 'ar' ? 'لا يوجد سجل أجور بعد' : 'No wage records yet'}</td></tr>`
+                : wageHistory.map(w => {
+                    const inputId = `wage-hist-emp-${employeeId}-${w.month}-${w.year}`;
+                    return `
+                        <tr class="border-b">
+                            <td class="px-4 py-3 font-mono font-medium text-primary-700">${formatWagePeriodCode(w.month, w.year)}</td>
+                            <td class="px-4 py-3">${monthNames[w.month]}</td>
+                            <td class="px-4 py-3 text-center">${w.year}</td>
+                            <td class="px-4 py-3 text-center">
+                                <input type="number" id="${inputId}" step="0.01" min="0" value="${Number(w.wage).toFixed(2)}"
+                                       class="w-full max-w-[140px] mx-auto px-3 py-1 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-center">
+                            </td>
+                            <td class="px-4 py-3 text-center">
+                                <button type="button" onclick="saveMonthlyWage('${employeeId}', ${w.month}, ${w.year}, '${inputId}')"
+                                        class="px-3 py-1 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm">${t('save')}</button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+
+            const content = `
+                <div class="space-y-6">
+                    <div class="p-4 bg-gray-50 rounded-lg">
+                        <p class="font-bold text-lg">${emp.name}</p>
+                        <p class="text-sm text-gray-500">${emp.code || ''}${project?.name ? ' | ' + project.name : ''}</p>
+                    </div>
+                    <div class="overflow-x-auto border rounded-lg">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="bg-gray-50 border-b">
+                                    <th class="px-4 py-3 text-right font-medium">${t('wagePeriod')}</th>
+                                    <th class="px-4 py-3 text-right font-medium">${t('month')}</th>
+                                    <th class="px-4 py-3 text-center font-medium">${t('year')}</th>
+                                    <th class="px-4 py-3 text-center font-medium">${t('wageAmount')}</th>
+                                    <th class="px-4 py-3 text-center font-medium">${t('actions')}</th>
+                                </tr>
+                            </thead>
+                            <tbody>${historyRows}</tbody>
+                        </table>
+                    </div>
+                    <div class="p-4 border rounded-lg bg-gray-50">
+                        <h4 class="font-medium mb-3">${t('addWageMonth')}</h4>
+                        <div class="flex flex-wrap items-end gap-3">
+                            <div class="flex flex-col">
+                                <label class="block text-xs text-gray-500 mb-1">${t('month')} (1–12)</label>
+                                <input type="number" id="wage-add-month-emp" value="${currentMonth}" min="1" max="12" placeholder="01"
+                                       class="w-24 px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500 text-center">
+                            </div>
+                            <div class="flex flex-col">
+                                <label class="block text-xs text-gray-500 mb-1">${t('year')}</label>
+                                <input type="number" id="wage-add-year-emp" value="${currentYear}" min="2020" max="2100"
+                                       class="w-24 px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500 text-center">
+                            </div>
+                            <div class="flex flex-col">
+                                <label class="block text-xs text-gray-500 mb-1">${t('wageAmount')}</label>
+                                <input type="number" id="wage-add-amount-emp" step="0.01" min="0" placeholder="0"
+                                       class="w-32 px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500 text-center">
+                            </div>
+                            <button type="button" onclick="addEmployeeWageMonth('${employeeId}')"
+                                    class="px-4 py-2 h-[42px] bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm">${t('add')}</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            const footer = `<button onclick="closeModal()" class="px-4 py-2 border rounded-lg hover:bg-gray-100 transition">${t('close')}</button>`;
+            openModal(t('wageHistory'), content, footer, 'max-w-6xl');
+        } catch (error) {
+            console.error('Error opening employee wage history:', error);
+            showToast(t('error'), 'error');
+        }
+    }
+
+    async function addEmployeeWageMonth(employeeId) {
+        const month = parseInt(document.getElementById('wage-add-month-emp')?.value, 10);
+        const year = parseInt(document.getElementById('wage-add-year-emp')?.value, 10);
+        const amountEl = document.getElementById('wage-add-amount-emp');
+        if (!month || month < 1 || month > 12 || !year || !amountEl) {
+            showToast(currentLanguage === 'ar' ? 'يرجى إدخال شهر (1-12) وسنة وأجر صحيح' : 'Please enter valid month (1-12), year and wage', 'error');
+            return;
+        }
+        await saveMonthlyWage(employeeId, month, year, 'wage-add-amount-emp');
+    }
+
+    async function saveMonthlyWage(employeeId, month, year, inputElementId) {
+        if (!inputElementId) return;
+
+        const wageInput = document.getElementById(inputElementId);
         if (!wageInput) return;
         
         const wage = parseFloat(wageInput.value);
@@ -8715,15 +8893,12 @@
 
             const wageHistory = empData.wageHistory || [];
             
-            // البحث عن سجل موجود لهذا الشهر
             const existingIndex = wageHistory.findIndex(w => w.month === month && w.year === year);
             
             if (existingIndex >= 0) {
-                // تحديث السجل الموجود
                 wageHistory[existingIndex].wage = wage;
                 wageHistory[existingIndex].updatedAt = new Date();
             } else {
-                // إضافة سجل جديد
                 wageHistory.push({
                     month,
                     year,
@@ -8733,7 +8908,6 @@
                 });
             }
             
-            // تحديث الأجر اليومي الحالي إذا كان الشهر الحالي
             const now = new Date();
             const currentMonth = now.getMonth() + 1;
             const currentYear = now.getFullYear();
@@ -8751,9 +8925,11 @@
             logActivity('update', 'employee', employeeId, empData.name, currentLanguage === 'ar' ? 'تحديث أجر يومي' : 'Daily wage updated');
             
             showToast(t('saved'), 'success');
-            
-            // تحديث الجدول
-            loadWageManagementData();
+            reloadActiveWageTab();
+
+            if (window._wageHistoryModal?.type === 'employee' && window._wageHistoryModal.id === employeeId) {
+                await openEmployeeWageHistoryModal(employeeId);
+            }
         } catch (error) {
             console.error('Error saving monthly wage:', error);
             showToast(t('error'), 'error');
@@ -8788,6 +8964,8 @@
         if (vehicles.length === 0) {
             return `<p class="text-gray-500 text-center py-8">${currentLanguage === 'ar' ? 'لا توجد آليات' : 'No vehicles'}</p>`;
         }
+
+        const wageColumnLabel = getWageColumnLabel(month, year);
         
         return `
             <table class="w-full text-sm border-collapse">
@@ -8796,8 +8974,7 @@
                         <th class="px-4 py-3 text-right font-medium">${t('vehicleName')}</th>
                         <th class="px-4 py-3 text-right font-medium">${t('projects')}</th>
                         <th class="px-4 py-3 text-center font-medium">${t('vehicleCalculationType')}</th>
-                        <th class="px-4 py-3 text-center font-medium">${t('currentDailyWage')}</th>
-                        <th class="px-4 py-3 text-center font-medium">${t('wageAmount')} (${currentLanguage === 'ar' ? 'IQD' : 'IQD'})</th>
+                        <th class="px-4 py-3 text-center font-medium">${wageColumnLabel}</th>
                         <th class="px-4 py-3 text-center font-medium">${t('actions')}</th>
                     </tr>
                 </thead>
@@ -8805,31 +8982,24 @@
                     ${vehicles.map(veh => {
                         const project = window.projectsListData?.find(p => p.id === veh.projectId);
                         const calcType = veh.calculationType || 'daily';
-                        const baseDaily = veh.dailyWage || 0;
-                        const baseMonthly = veh.monthlyWage || 0;
-                        const wageHistory = veh.wageHistory || [];
-                        const monthWage = wageHistory.find(w => w.month === month && w.year === year);
-                        let displayWage = monthWage ? monthWage.wage : (calcType === 'daily' ? baseDaily : baseMonthly);
-                        const currentLabel = calcType === 'daily' ? t('vehicleDailyWage') : t('vehicleMonthlyWage');
+                        const { wage, isRecorded, isDefault } = getVehicleWageForMonth(veh, month, year);
+                        const badge = formatWageBadge(isRecorded, isDefault);
                         
                         return `
                             <tr class="border-b hover:bg-gray-50 wage-vehicle-row" data-vehicle-id="${veh.id}" data-name="${(veh.name || '').toLowerCase()}">
                                 <td class="px-4 py-3 font-medium">${veh.name || ''}</td>
                                 <td class="px-4 py-3">${project?.name || '-'}</td>
                                 <td class="px-4 py-3 text-center">${t(calcType)}</td>
-                                <td class="px-4 py-3 text-center">${currentLabel}: ${displayWage.toFixed(2)} ${currentLanguage === 'ar' ? 'IQD' : 'IQD'}</td>
                                 <td class="px-4 py-3 text-center">
-                                    <input type="number" 
-                                           id="vehicle-wage-input-${veh.id}" 
-                                           step="0.01" 
-                                           min="0" 
-                                           value="${displayWage.toFixed(2)}"
-                                           class="w-32 px-3 py-1 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-center">
+                                    <span class="inline-flex items-center justify-center gap-1 flex-wrap">
+                                        ${badge}
+                                        <span class="font-medium">${formatWageAmount(wage)}</span>
+                                    </span>
                                 </td>
                                 <td class="px-4 py-3 text-center">
-                                    <button onclick="saveVehicleWage('${veh.id}', ${month}, ${year})" 
-                                            class="px-3 py-1 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm">
-                                        ${t('save')}
+                                    <button onclick="openVehicleWageHistoryModal('${veh.id}')" 
+                                            class="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg transition text-sm inline-flex items-center gap-1">
+                                        📋 ${t('viewEditWages')}
                                     </button>
                                 </td>
                             </tr>
@@ -8911,8 +9081,118 @@
         }
     }
     
-    async function saveVehicleWage(vehicleId, month, year) {
-        const wageInput = document.getElementById(`vehicle-wage-input-${vehicleId}`);
+    async function openVehicleWageHistoryModal(vehicleId) {
+        try {
+            const doc = await db.collection('vehicles').doc(vehicleId).get();
+            if (!doc.exists) {
+                showToast(t('error'), 'error');
+                return;
+            }
+            const veh = { id: doc.id, ...doc.data() };
+            if (!canAccessVehicleForWage(veh)) {
+                showToast(currentLanguage === 'ar' ? 'غير مصرح' : 'Unauthorized', 'error');
+                return;
+            }
+
+            window._wageHistoryModal = { type: 'vehicle', id: vehicleId };
+            const project = window.projectsListData?.find(p => p.id === veh.projectId);
+            const calcType = veh.calculationType || 'daily';
+            const monthNames = getWageMonthNames();
+            const wageHistory = [...(veh.wageHistory || [])].sort((a, b) => {
+                if (a.year !== b.year) return b.year - a.year;
+                return b.month - a.month;
+            });
+            const now = new Date();
+            const currentMonth = now.getMonth() + 1;
+            const currentYear = now.getFullYear();
+
+            const historyRows = wageHistory.length === 0
+                ? `<tr><td colspan="5" class="px-4 py-6 text-center text-gray-500">${currentLanguage === 'ar' ? 'لا يوجد سجل أجور بعد' : 'No wage records yet'}</td></tr>`
+                : wageHistory.map(w => {
+                    const inputId = `wage-hist-veh-${vehicleId}-${w.month}-${w.year}`;
+                    return `
+                        <tr class="border-b">
+                            <td class="px-4 py-3 font-mono font-medium text-primary-700">${formatWagePeriodCode(w.month, w.year)}</td>
+                            <td class="px-4 py-3">${monthNames[w.month]}</td>
+                            <td class="px-4 py-3 text-center">${w.year}</td>
+                            <td class="px-4 py-3 text-center">
+                                <input type="number" id="${inputId}" step="0.01" min="0" value="${Number(w.wage).toFixed(2)}"
+                                       class="w-full max-w-[140px] mx-auto px-3 py-1 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-center">
+                            </td>
+                            <td class="px-4 py-3 text-center">
+                                <button type="button" onclick="saveVehicleWage('${vehicleId}', ${w.month}, ${w.year}, '${inputId}')"
+                                        class="px-3 py-1 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm">${t('save')}</button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+
+            const content = `
+                <div class="space-y-6">
+                    <div class="p-4 bg-gray-50 rounded-lg">
+                        <p class="font-bold text-lg">${veh.name || ''}</p>
+                        <p class="text-sm text-gray-500">${veh.code || ''}${project?.name ? ' | ' + project.name : ''} | ${t(calcType)}</p>
+                    </div>
+                    <div class="overflow-x-auto border rounded-lg">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="bg-gray-50 border-b">
+                                    <th class="px-4 py-3 text-right font-medium">${t('wagePeriod')}</th>
+                                    <th class="px-4 py-3 text-right font-medium">${t('month')}</th>
+                                    <th class="px-4 py-3 text-center font-medium">${t('year')}</th>
+                                    <th class="px-4 py-3 text-center font-medium">${t('wageAmount')}</th>
+                                    <th class="px-4 py-3 text-center font-medium">${t('actions')}</th>
+                                </tr>
+                            </thead>
+                            <tbody>${historyRows}</tbody>
+                        </table>
+                    </div>
+                    <div class="p-4 border rounded-lg bg-gray-50">
+                        <h4 class="font-medium mb-3">${t('addWageMonth')}</h4>
+                        <div class="flex flex-wrap items-end gap-3">
+                            <div class="flex flex-col">
+                                <label class="block text-xs text-gray-500 mb-1">${t('month')} (1–12)</label>
+                                <input type="number" id="wage-add-month-veh" value="${currentMonth}" min="1" max="12" placeholder="01"
+                                       class="w-24 px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500 text-center">
+                            </div>
+                            <div class="flex flex-col">
+                                <label class="block text-xs text-gray-500 mb-1">${t('year')}</label>
+                                <input type="number" id="wage-add-year-veh" value="${currentYear}" min="2020" max="2100"
+                                       class="w-24 px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500 text-center">
+                            </div>
+                            <div class="flex flex-col">
+                                <label class="block text-xs text-gray-500 mb-1">${t('wageAmount')}</label>
+                                <input type="number" id="wage-add-amount-veh" step="0.01" min="0" placeholder="0"
+                                       class="w-32 px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500 text-center">
+                            </div>
+                            <button type="button" onclick="addVehicleWageMonth('${vehicleId}')"
+                                    class="px-4 py-2 h-[42px] bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm">${t('add')}</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            const footer = `<button onclick="closeModal()" class="px-4 py-2 border rounded-lg hover:bg-gray-100 transition">${t('close')}</button>`;
+            openModal(t('wageHistory'), content, footer, 'max-w-6xl');
+        } catch (error) {
+            console.error('Error opening vehicle wage history:', error);
+            showToast(t('error'), 'error');
+        }
+    }
+
+    async function addVehicleWageMonth(vehicleId) {
+        const month = parseInt(document.getElementById('wage-add-month-veh')?.value, 10);
+        const year = parseInt(document.getElementById('wage-add-year-veh')?.value, 10);
+        if (!month || month < 1 || month > 12 || !year || !document.getElementById('wage-add-amount-veh')) {
+            showToast(currentLanguage === 'ar' ? 'يرجى إدخال شهر (1-12) وسنة وأجر صحيح' : 'Please enter valid month (1-12), year and wage', 'error');
+            return;
+        }
+        await saveVehicleWage(vehicleId, month, year, 'wage-add-amount-veh');
+    }
+
+    async function saveVehicleWage(vehicleId, month, year, inputElementId) {
+        if (!inputElementId) return;
+
+        const wageInput = document.getElementById(inputElementId);
         if (!wageInput) return;
         
         const wage = parseFloat(wageInput.value);
@@ -8971,7 +9251,11 @@
             await db.collection('vehicles').doc(vehicleId).update(updateData);
             
             showToast(t('saved'), 'success');
-            loadVehicleWageManagementData();
+            reloadActiveWageTab();
+
+            if (window._wageHistoryModal?.type === 'vehicle' && window._wageHistoryModal.id === vehicleId) {
+                await openVehicleWageHistoryModal(vehicleId);
+            }
         } catch (error) {
             console.error('Error saving vehicle wage:', error);
             showToast(t('error'), 'error');
