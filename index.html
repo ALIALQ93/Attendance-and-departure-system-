@@ -989,6 +989,15 @@
             missionRequest: "طلب مهمة",
             editRequest: "طلب تعديل",
             transferRequest: "طلب نقل",
+            typeHistory: "سجل تحويل النوع",
+            typeChangeEffectiveDate: "تاريخ سريان التحويل",
+            typeChangeNote: "ملاحظة التحويل (اختياري)",
+            typeChangeWarning: "سيتم تسجيل تحويل نوع الموظف مع التاريخ أدناه.",
+            typeChangeRequired: "يرجى تحديد تاريخ سريان تحويل النوع",
+            typePeriodNoticeTitle: "تنويه — نوع الموظف في هذه الفترة:",
+            typeAtDate: "نوع في التاريخ",
+            dailyWageDaysOnly: "يُحسب الأجر اليومي للأيام التي كان فيها الموظف يومياً فقط",
+            mixedTypeEmployeesNotice: "موظفون غيّروا نوعهم خلال الفترة:",
             attended: "حضر",
             notAttended: "لم يحضر",
             approved: "تمت الموافقة",
@@ -1345,6 +1354,15 @@
             missionRequest: "Mission Request",
             editRequest: "Edit Request",
             transferRequest: "Transfer Request",
+            typeHistory: "Type Change History",
+            typeChangeEffectiveDate: "Effective date of change",
+            typeChangeNote: "Change note (optional)",
+            typeChangeWarning: "The employee type change will be recorded with the date below.",
+            typeChangeRequired: "Please specify the effective date of the type change",
+            typePeriodNoticeTitle: "Note — employee type in this period:",
+            typeAtDate: "Type on date",
+            dailyWageDaysOnly: "Daily wage is calculated only for days when the employee was daily",
+            mixedTypeEmployeesNotice: "Employees who changed type during the period:",
             attended: "Attended",
             notAttended: "Not Attended",
             approved: "Approved",
@@ -3032,10 +3050,15 @@
         
         const assignmentMode = employee?.assignmentMode || 'specific';
         const assignedProjectIds = employee?.assignedProjectIds || [];
+        const defaultTypeChangeDate = (() => {
+            const now = new Date();
+            return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+        })();
         
         const content = `
             <form id="employee-form" class="space-y-4">
                 <input type="hidden" id="employee-id" value="${employee?.id || ''}">
+                <input type="hidden" id="employee-original-type" value="${employee?.type || ''}">
                 
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">${t('employeeName')} *</label>
@@ -3046,7 +3069,7 @@
                 <div class="grid grid-cols-2 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">${t('employeeType')} *</label>
-                        <select id="employee-type" required class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" onchange="toggleJobPositionField()">
+                        <select id="employee-type" required class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" onchange="toggleJobPositionField(); toggleEmployeeAssignmentMode(); toggleTypeChangeFields();">
                             <option value="daily" ${employee?.type === 'daily' ? 'selected' : ''}>${t('daily')}</option>
                             <option value="monthly" ${employee?.type === 'monthly' ? 'selected' : ''}>${t('monthly')}</option>
                         </select>
@@ -3056,6 +3079,20 @@
                         <select id="employee-project" required class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" onchange="updateEmployeeSchedule()">
                             ${allowedProjects.map(p => `<option value="${p.id}" data-start="${p.defaultSchedule?.startTime || '08:00'}" data-end="${p.defaultSchedule?.endTime || '17:00'}" ${employee?.projectId === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}
                         </select>
+                    </div>
+                </div>
+                
+                <div id="type-change-fields" class="hidden p-4 bg-amber-50 border border-amber-200 rounded-lg space-y-3">
+                    <p class="text-sm text-amber-800 font-medium">${t('typeChangeWarning')}</p>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">${t('typeChangeEffectiveDate')} *</label>
+                        <input type="date" id="employee-type-effective-date" value="${defaultTypeChangeDate}"
+                               class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">${t('typeChangeNote')}</label>
+                        <input type="text" id="employee-type-change-note"
+                               class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none">
                     </div>
                 </div>
                 
@@ -3148,7 +3185,17 @@
         setTimeout(() => {
             toggleJobPositionField();
             toggleEmployeeAssignmentMode();
+            toggleTypeChangeFields();
         }, 100);
+    }
+    
+    function toggleTypeChangeFields() {
+        const originalType = document.getElementById('employee-original-type')?.value || '';
+        const typeSelect = document.getElementById('employee-type');
+        const wrapper = document.getElementById('type-change-fields');
+        if (!wrapper || !typeSelect) return;
+        const typeChanged = !!originalType && typeSelect.value !== originalType;
+        wrapper.classList.toggle('hidden', !typeChanged);
     }
     
     function updateEmployeeSchedule() {
@@ -3306,6 +3353,27 @@
                 const oldData = oldDoc.data();
                 const oldProjectId = oldData?.projectId;
                 const oldDailyWage = oldData?.dailyWage;
+                const oldType = oldData?.type;
+                let typeChangeEffectiveDate = '';
+                let typeChangeNote = '';
+                
+                if (oldType && oldType !== type) {
+                    typeChangeEffectiveDate = form.querySelector('#employee-type-effective-date')?.value || '';
+                    typeChangeNote = (form.querySelector('#employee-type-change-note')?.value || '').trim();
+                    if (!typeChangeEffectiveDate) {
+                        showToast(t('typeChangeRequired'), 'error');
+                        return;
+                    }
+                    employeeData.typeHistory = firebase.firestore.FieldValue.arrayUnion({
+                        fromType: oldType,
+                        toType: type,
+                        effectiveDate: typeChangeEffectiveDate,
+                        note: typeChangeNote,
+                        changedBy: currentUser.uid,
+                        changedByName: currentUserData?.name || currentUser.email || '',
+                        changedAt: new Date()
+                    });
+                }
                 
                 // إدارة سجل الأجور: إذا تغير الأجر اليومي، نضيف سجل جديد
                 if (type === 'daily' && dailyWage !== null && dailyWage !== oldDailyWage) {
@@ -3348,7 +3416,12 @@
                         employeesCount: firebase.firestore.FieldValue.increment(1)
                     });
                 }
-                logActivity('update', 'employee', id, name, currentLanguage === 'ar' ? 'تعديل موظف' : 'Employee updated');
+                const activityDetails = (oldType && oldType !== type)
+                    ? (currentLanguage === 'ar'
+                        ? `تحويل نوع الموظف: ${t(oldType)} → ${t(type)} (ساري من ${formatDate(new Date(typeChangeEffectiveDate + 'T12:00:00'))})`
+                        : `Employee type changed: ${t(oldType)} → ${t(type)} (effective ${typeChangeEffectiveDate})`)
+                    : (currentLanguage === 'ar' ? 'تعديل موظف' : 'Employee updated');
+                logActivity('update', 'employee', id, name, activityDetails);
             } else {
                 // إضافة
                 const counterDoc = await db.collection('settings').doc('counters').get();
@@ -3360,6 +3433,7 @@
                 employeeData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
                 employeeData.createdBy = currentUser.uid;
                 employeeData.transferHistory = [];
+                employeeData.typeHistory = [];
                 
                 // إضافة سجل الأجر الأولي للموظفين اليوميين
                 if (type === 'daily' && dailyWage !== null) {
@@ -3469,6 +3543,30 @@
                                 <div class="text-sm bg-gray-50 p-2 rounded">
                                     ${monthNames[wh.month]} ${wh.year}: ${wh.wage.toFixed(2)} ${currentLanguage === 'ar' ? 'IQD' : 'IQD'}
                                     ${date ? ` (${formatDate(date)})` : ''}
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+                ` : ''}
+                
+                ${employee.typeHistory?.length > 0 ? `
+                <div class="pt-4 border-t">
+                    <label class="text-sm text-gray-500 mb-2 block">${t('typeHistory')}</label>
+                    <div class="space-y-2 max-h-48 overflow-y-auto">
+                        ${[...(employee.typeHistory || [])].sort((a, b) => {
+                            const dateA = a.effectiveDate || '';
+                            const dateB = b.effectiveDate || '';
+                            return dateB.localeCompare(dateA);
+                        }).map(th => {
+                            const changedAt = th.changedAt?.toDate ? th.changedAt.toDate() : (th.changedAt || null);
+                            const effectiveLabel = th.effectiveDate ? formatDate(new Date(th.effectiveDate + 'T12:00:00')) : '—';
+                            return `
+                                <div class="text-sm bg-gray-50 p-2 rounded">
+                                    ${t(th.fromType)} → ${t(th.toType)}
+                                    <span class="text-gray-500">(${effectiveLabel})</span>
+                                    ${th.note ? `<div class="text-gray-500 mt-1">${th.note}</div>` : ''}
+                                    ${changedAt ? `<div class="text-xs text-gray-400 mt-1">${th.changedByName || ''} — ${formatDate(changedAt)}</div>` : ''}
                                 </div>
                             `;
                         }).join('')}
@@ -4175,6 +4273,7 @@
                         thursday: false, friday: false
                     },
                     transferHistory: [],
+                    typeHistory: [],
                     createdBy: currentUser.uid,
                     createdAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
@@ -6992,6 +7091,159 @@
         return Math.round(dayFraction * 100) / 100;
     }
     
+    function addDaysToYyyyMmDd(dateStr, days) {
+        const norm = toYyyyMmDd(dateStr) || dateStr;
+        if (!norm) return '';
+        const parts = norm.split('-').map(Number);
+        const d = new Date(parts[0], parts[1] - 1, parts[2]);
+        d.setDate(d.getDate() + days);
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+    
+    function normalizeTypeHistory(employee) {
+        return [...(employee?.typeHistory || [])]
+            .map(entry => ({
+                fromType: entry.fromType,
+                toType: entry.toType,
+                effectiveDate: toYyyyMmDd(entry.effectiveDate) || entry.effectiveDate
+            }))
+            .filter(e => e.effectiveDate && e.fromType && e.toType)
+            .sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate));
+    }
+    
+    function getEmployeeTypeAtDate(employee, dateStr) {
+        const dateNorm = toYyyyMmDd(dateStr) || dateStr;
+        const changes = normalizeTypeHistory(employee);
+        if (!dateNorm || changes.length === 0) return employee?.type || 'daily';
+        
+        let applicable = null;
+        for (const ch of changes) {
+            if (ch.effectiveDate <= dateNorm) applicable = ch;
+            else break;
+        }
+        return applicable ? applicable.toType : changes[0].fromType;
+    }
+    
+    function getEmployeeTypePeriodsInRange(employee, fromDate, toDate) {
+        const fromNorm = toYyyyMmDd(fromDate) || fromDate;
+        const toNorm = toYyyyMmDd(toDate) || toDate;
+        if (!fromNorm || !toNorm || fromNorm > toNorm) return [];
+        
+        const changes = normalizeTypeHistory(employee);
+        const splitDates = [fromNorm];
+        changes.forEach(ch => {
+            if (ch.effectiveDate > fromNorm && ch.effectiveDate <= toNorm) {
+                splitDates.push(ch.effectiveDate);
+            }
+        });
+        
+        const rawPeriods = splitDates.map((segFrom, i) => {
+            const segTo = i < splitDates.length - 1
+                ? addDaysToYyyyMmDd(splitDates[i + 1], -1)
+                : toNorm;
+            return {
+                type: getEmployeeTypeAtDate(employee, segFrom),
+                from: segFrom,
+                to: segTo
+            };
+        });
+        
+        const merged = [];
+        rawPeriods.forEach(p => {
+            const last = merged[merged.length - 1];
+            if (last && last.type === p.type && addDaysToYyyyMmDd(last.to, 1) === p.from) {
+                last.to = p.to;
+            } else {
+                merged.push({ ...p });
+            }
+        });
+        return merged;
+    }
+    
+    function employeeHadTypeInRange(employee, fromDate, toDate, type) {
+        return getEmployeeTypePeriodsInRange(employee, fromDate, toDate).some(p => p.type === type);
+    }
+    
+    function hasMixedTypeInRange(employee, fromDate, toDate) {
+        const periods = getEmployeeTypePeriodsInRange(employee, fromDate, toDate);
+        return new Set(periods.map(p => p.type)).size > 1;
+    }
+    
+    function formatReportDateRange(from, to) {
+        const f = formatDate(new Date(from + 'T12:00:00'));
+        const tEnd = formatDate(new Date(to + 'T12:00:00'));
+        return from === to ? f : `${f} — ${tEnd}`;
+    }
+    
+    function formatEmployeeTypePeriodsText(employee, fromDate, toDate) {
+        return getEmployeeTypePeriodsInRange(employee, fromDate, toDate)
+            .map(p => `${formatReportDateRange(p.from, p.to)}: ${t(p.type)}`)
+            .join(currentLanguage === 'ar' ? ' | ' : ' | ');
+    }
+    
+    function renderEmployeeTypePeriodsNotice(employee, fromDate, toDate) {
+        if (!hasMixedTypeInRange(employee, fromDate, toDate)) return '';
+        return `
+            <div class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">
+                <strong>${t('typePeriodNoticeTitle')}</strong>
+                ${formatEmployeeTypePeriodsText(employee, fromDate, toDate)}
+            </div>
+        `;
+    }
+    
+    function getEmployeeTypeLabelForReport(employee, fromDate, toDate) {
+        if (hasMixedTypeInRange(employee, fromDate, toDate)) {
+            return getEmployeeTypePeriodsInRange(employee, fromDate, toDate)
+                .map(p => `<span class="block text-xs">${t(p.type)} <span class="text-gray-500">(${formatReportDateRange(p.from, p.to)})</span></span>`)
+                .join('');
+        }
+        const periods = getEmployeeTypePeriodsInRange(employee, fromDate, toDate);
+        return t(periods[0]?.type || employee.type || 'daily');
+    }
+    
+    function getAttendanceNumericDayValue(att) {
+        if (att.status === 'full_day') return 1;
+        if (att.status === 'partial') return att.partialDetails?.remainderExcused === true ? 1 : getPartialEquivalentDays(att);
+        if (att.status === 'shift') return getShiftEquivalentDays(att);
+        if (att.status === 'sickLeave') return att.sickLeaveExcused === false ? 0 : 1;
+        if (['excusedAbsent', 'annualLeave', 'emergencyLeave', 'unpaidLeave', 'periodicLeave', 'officialHoliday', 'onMission'].includes(att.status)) return 1;
+        if (att.status === 'absent') return 0;
+        return 0;
+    }
+    
+    function getEmployeeDailyWageForDate(employee, dateStr) {
+        const dateNorm = toYyyyMmDd(dateStr) || dateStr;
+        if (!dateNorm) return employee?.dailyWage || 0;
+        const parts = dateNorm.split('-').map(Number);
+        const month = parts[1];
+        const year = parts[0];
+        const wageHistory = employee.wageHistory || [];
+        const monthWage = wageHistory.find(w => w.month === month && w.year === year);
+        return monthWage ? monthWage.wage : (employee.dailyWage || 0);
+    }
+    
+    function calculateDailyWageTotalsForAttendance(employee, attendanceRecords) {
+        let totalNumericDays = 0;
+        let totalApprovedNumericDays = 0;
+        let totalSalary = 0;
+        
+        attendanceRecords.forEach(att => {
+            if (getEmployeeTypeAtDate(employee, att.date) !== 'daily') return;
+            const dayValue = getAttendanceNumericDayValue(att);
+            totalNumericDays += dayValue;
+            if (att.approved === true) {
+                totalApprovedNumericDays += dayValue;
+                totalSalary += getEmployeeDailyWageForDate(employee, att.date) * dayValue;
+            }
+        });
+        
+        return {
+            totalNumericDays,
+            totalApprovedNumericDays,
+            totalSalary: roundToNearest250(totalSalary)
+        };
+    }
+    
     async function generateProjectReport() {
         const projectId = document.getElementById('report-project').value;
         const fromDate = document.getElementById('report-project-from').value;
@@ -7060,11 +7312,15 @@
                 allVehicles = allVehicles.filter(v => v.status !== 'hidden');
             }
             
-            // فلترة الموظفين حسب النوع
+            // فلترة الموظفين حسب النوع (مع مراعاة سجل تحويل النوع في الفترة)
+            const fromNorm = toYyyyMmDd(fromDate) || fromDate;
+            const toNorm = toYyyyMmDd(toDate) || toDate;
             let employees = allEmployees;
             if (employeeTypeFilter !== 'all' && employeeTypeFilter !== 'vehicles') {
-                employees = employees.filter(e => e.type === employeeTypeFilter);
+                employees = allEmployees.filter(e => employeeHadTypeInRange(e, fromNorm, toNorm, employeeTypeFilter));
             }
+            
+            const mixedTypeEmployees = employees.filter(e => hasMixedTypeInRange(e, fromNorm, toNorm));
             
             const vehicles = allVehicles;
             
@@ -7298,6 +7554,16 @@
                     <p class="text-sm text-gray-600 mb-4 no-print-stats">${t('excusedAttendance')} + ${t('unexcusedAttendance')} = ${t('daysInPeriod')} (${daysInPeriod})</p>
                     <p class="text-sm text-gray-600 mb-4 no-print-stats">${t('reportApprovalNote')} ✓ ${t('approvedRecords')}: ${totals.approvedRecords} | ${t('unapprovedRecords')}: ${totals.unapprovedRecords}</p>
                     <p class="text-sm text-gray-600 mb-4 no-print-stats">${t('actualAttendanceNote')}</p>
+                    ${mixedTypeEmployees.length > 0 ? `
+                    <div class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900 no-print-stats">
+                        <strong>${t('mixedTypeEmployeesNotice')}</strong>
+                        <ul class="mt-2 space-y-1 list-disc list-inside">
+                            ${mixedTypeEmployees.map(emp => `
+                                <li><span class="font-medium">${emp.name}</span>: ${formatEmployeeTypePeriodsText(emp, fromNorm, toNorm)}</li>
+                            `).join('')}
+                        </ul>
+                    </div>
+                    ` : ''}
                     <h4 class="font-bold mb-4">${t('employees')} (${employees.length})</h4>
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm">
@@ -7332,7 +7598,7 @@
                                     <tr class="hover:bg-gray-50">
                                         <td class="px-2 py-2 font-mono">${emp.code}</td>
                                         <td class="px-2 py-2 font-medium">${emp.name}</td>
-                                        <td class="px-2 py-2">${t(emp.type)}</td>
+                                        <td class="px-2 py-2">${getEmployeeTypeLabelForReport(emp, fromNorm, toNorm)}</td>
                                         <td class="px-2 py-2 text-center text-green-600">${emp.fullDay}</td>
                                         <td class="px-2 py-2 text-center text-yellow-600">${emp.partialCount}</td>
                                         <td class="px-2 py-2 text-center">${emp.partialEquivalentDays.toFixed(2)}</td>
@@ -7431,7 +7697,7 @@
             const projDoc = employee.projectId ? await db.collection('projects').doc(employee.projectId).get() : null;
             const project = projDoc?.exists ? projDoc.data() : null;
             
-            const isGeneralDaily = employee.type === 'daily' && employee.assignmentMode === 'general';
+            const isGeneralDaily = employee.assignmentMode === 'general';
             const assignedProjectIds = Array.isArray(employee.assignedProjectIds) ? employee.assignedProjectIds : [];
             const supervisorProjectFilter = (currentUserData?.role === 'supervisor' || currentUserData?.role === 'approver') && currentUserData.assignedProjects?.length > 0
                 ? currentUserData.assignedProjects
@@ -7460,6 +7726,12 @@
                 }
             });
             
+            const typePeriods = getEmployeeTypePeriodsInRange(employee, fromNorm, toNorm);
+            const showTypeColumn = hasMixedTypeInRange(employee, fromNorm, toNorm);
+            const headerTypeLabel = hasMixedTypeInRange(employee, fromNorm, toNorm)
+                ? formatEmployeeTypePeriodsText(employee, fromNorm, toNorm)
+                : t(typePeriods[0]?.type || employee.type);
+            
             const distinctProjectIds = [...new Set(attendance.map(a => a.projectId).filter(Boolean))];
             const showProjectColumn = isGeneralDaily || distinctProjectIds.length > 1;
             const generalProjectsLabel = isGeneralDaily && assignedProjectIds.length > 0
@@ -7480,31 +7752,16 @@
             let totalNumericDays = 0;
             let totalApprovedNumericDays = 0;
             attendance.forEach(att => {
-                let dayValue = 0;
-                if (att.status === 'full_day') {
-                    dayValue = 1; // حضور كامل = 1
-                } else if (att.status === 'partial') {
-                    dayValue = att.partialDetails?.remainderExcused === true ? 1 : getPartialEquivalentDays(att);
-                } else if (att.status === 'shift') {
-                    dayValue = getShiftEquivalentDays(att);
-                } else if (att.status === 'sickLeave') {
-                    dayValue = att.sickLeaveExcused === false ? 0 : 1; // حسب اختيار المستخدم
-                } else if (att.status === 'excusedAbsent' || 
-                          att.status === 'annualLeave' || 
-                          att.status === 'emergencyLeave' || 
-                          att.status === 'unpaidLeave' || 
-                          att.status === 'periodicLeave' ||
-                          att.status === 'officialHoliday' || 
-                          att.status === 'onMission') {
-                    dayValue = 1; // جميع الإجازات (مؤجورة) = 1
-                } else if (att.status === 'absent') {
-                    dayValue = 0; // الغياب (غير مؤجور) = 0
-                }
+                const dayValue = getAttendanceNumericDayValue(att);
                 totalNumericDays += dayValue;
                 if (att.approved === true) {
                     totalApprovedNumericDays += dayValue;
                 }
             });
+            
+            const dailyWageTotals = calculateDailyWageTotalsForAttendance(employee, attendance);
+            const totalSalary = dailyWageTotals.totalApprovedNumericDays > 0 ? dailyWageTotals.totalSalary : null;
+            const dailyApprovedDays = dailyWageTotals.totalApprovedNumericDays;
             
             // حساب الإحصائيات
             const stats = {
@@ -7523,31 +7780,8 @@
             const totalDays = attendance.length;
             const rate = totalDays > 0 ? Math.round((totalWork / totalDays) * 100) : 0;
             
-            // حساب الراتب الإجمالي للموظفين اليوميين
-            let totalSalary = null;
-            let dailyWage = null;
-            if (employee.type === 'daily') {
-                // تحديد الأجر اليومي بناءً على الفترة المحددة
-                const fromDateObj = new Date(fromDate);
-                const toDateObj = new Date(toDate);
-                const reportMonth = fromDateObj.getMonth() + 1;
-                const reportYear = fromDateObj.getFullYear();
-                
-                // البحث عن الأجر في wageHistory للشهر المحدد
-                const wageHistory = employee.wageHistory || [];
-                const monthWage = wageHistory.find(w => w.month === reportMonth && w.year === reportYear);
-                
-                if (monthWage) {
-                    dailyWage = monthWage.wage;
-                } else {
-                    // استخدام الأجر الحالي إذا لم يوجد سجل للشهر
-                    dailyWage = employee.dailyWage || 0;
-                }
-                
-                if (dailyWage > 0) {
-                    totalSalary = roundToNearest250(dailyWage * totalApprovedNumericDays);
-                }
-            }
+            // حساب الراتب الإجمالي للأيام اليومية فقط (حسب typeHistory)
+            const showDailySalary = dailyApprovedDays > 0 && totalSalary !== null;
             
             const headerProjectLine = isGeneralDaily
                 ? (currentLanguage === 'ar' ? 'موظف عام — ' : 'General — ') + (generalProjectsLabel || (project?.name || '-'))
@@ -7558,12 +7792,14 @@
                     <div class="flex items-center justify-between mb-6">
                         <div>
                             <h3 class="font-bold text-xl">${employee.name}</h3>
-                            <p class="text-gray-500">${employee.code} | ${t(employee.type)} | ${headerProjectLine}</p>
+                            <p class="text-gray-500">${employee.code} | ${headerTypeLabel} | ${headerProjectLine}</p>
                         </div>
                         <button onclick="printReportInNewTab()" class="no-print px-4 py-2 border rounded-lg hover:bg-gray-100">
                             🖨️ ${t('print')}
                         </button>
                     </div>
+                    
+                    ${renderEmployeeTypePeriodsNotice(employee, fromNorm, toNorm)}
                     
                     ${(employee.note || '').trim() ? `
                     <div class="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
@@ -7572,14 +7808,14 @@
                     </div>
                     ` : ''}
                     
-                    ${employee.type === 'daily' && totalSalary !== null ? `
+                    ${showDailySalary ? `
                     <div class="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
                         <div class="flex items-center justify-between">
                             <div>
                                 <p class="text-sm text-gray-600 mb-1">${t('salaryCalculation')}</p>
-                                <p class="text-sm text-gray-700">
-                                    ${t('currentDailyWage')}: <span class="font-bold">${formatWage(dailyWage)} ${currentLanguage === 'ar' ? 'IQD' : 'IQD'}</span>
-                                    × ${totalApprovedNumericDays.toFixed(2)} ${currentLanguage === 'ar' ? 'يوم معتمد' : 'approved days'}
+                                <p class="text-sm text-gray-700">${t('dailyWageDaysOnly')}</p>
+                                <p class="text-sm text-gray-700 mt-1">
+                                    ${dailyApprovedDays.toFixed(2)} ${currentLanguage === 'ar' ? 'يوم يومي معتمد' : 'approved daily days'}
                                 </p>
                             </div>
                             <div class="text-right">
@@ -7624,6 +7860,7 @@
                                 <tr>
                                     <th class="px-4 py-2 text-right">${t('date')}</th>
                                     ${showProjectColumn ? `<th class="px-4 py-2 text-right">${t('projects')}</th>` : ''}
+                                    ${showTypeColumn ? `<th class="px-4 py-2 text-right">${t('typeAtDate')}</th>` : ''}
                                     <th class="px-4 py-2 text-right">${t('status')}</th>
                                     <th class="px-4 py-2 text-center">${currentLanguage === 'ar' ? 'الحضور (رقمي)' : 'Attendance (Numeric)'}</th>
                                     <th class="px-4 py-2 text-center">${t('approved')}</th>
@@ -7633,36 +7870,20 @@
                             <tbody class="divide-y">
                                 ${attendance.map(att => {
                                     const statusInfo = attendanceStatuses.employee.find(s => s.key === att.status);
-                                    // حساب القيمة الرقمية (بغض النظر عن الاعتماد)
-                                    // المؤجور = 1، غير المؤجور = 0
-                                    let numericValue = 0;
-                                    if (att.status === 'full_day') {
-                                        numericValue = 1; // حضور كامل = 1
-                                    } else if (att.status === 'partial') {
-                                        numericValue = att.partialDetails?.remainderExcused === true ? 1 : getPartialEquivalentDays(att);
-                                    } else if (att.status === 'shift') {
-                                        numericValue = getShiftEquivalentDays(att);
-                                    } else if (att.status === 'sickLeave') {
-                                        numericValue = att.sickLeaveExcused === false ? 0 : 1; // حسب اختيار المستخدم
-                                    } else if (att.status === 'excusedAbsent' || 
-                                              att.status === 'annualLeave' || 
-                                              att.status === 'emergencyLeave' || 
-                                              att.status === 'unpaidLeave' || 
-                                              att.status === 'periodicLeave' ||
-                                              att.status === 'officialHoliday' || 
-                                              att.status === 'onMission') {
-                                        numericValue = 1; // جميع الإجازات (مؤجورة) = 1
-                                    } else if (att.status === 'absent') {
-                                        numericValue = 0; // الغياب (غير مؤجور) = 0
-                                    }
+                                    const numericValue = getAttendanceNumericDayValue(att);
+                                    const attType = getEmployeeTypeAtDate(employee, att.date);
                                     
                                     const projectCell = showProjectColumn
                                         ? `<td class="px-4 py-2 text-gray-700">${projectById(att.projectId)?.name || att.projectId || '-'}</td>`
+                                        : '';
+                                    const typeCell = showTypeColumn
+                                        ? `<td class="px-4 py-2"><span class="px-2 py-0.5 text-xs rounded-full ${attType === 'daily' ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'}">${t(attType)}</span></td>`
                                         : '';
                                     return `
                                         <tr class="hover:bg-gray-50">
                                             <td class="px-4 py-2">${formatDate(new Date(att.date))}</td>
                                             ${projectCell}
+                                            ${typeCell}
                                             <td class="px-4 py-2">
                                                 <span class="inline-flex items-center gap-1">
                                                     ${statusInfo?.icon || ''} ${t(att.status)}
@@ -7680,7 +7901,7 @@
                                     `;
                                 }).join('')}
                                 <tr class="bg-gray-100 font-bold">
-                                    <td class="px-4 py-2" colspan="${showProjectColumn ? 3 : 2}">${currentLanguage === 'ar' ? 'الإجمالي' : 'Total'}</td>
+                                    <td class="px-4 py-2" colspan="${(showProjectColumn ? 1 : 0) + (showTypeColumn ? 1 : 0) + 2}">${currentLanguage === 'ar' ? 'الإجمالي' : 'Total'}</td>
                                     <td class="px-4 py-2 text-center text-primary-600">${totalNumericDays.toFixed(2)}</td>
                                     <td class="px-4 py-2 text-center">
                                         ${attendance.filter(a => a.approved === true).length} ${t('approved')} / ${attendance.length} ${currentLanguage === 'ar' ? 'إجمالي' : 'total'}
@@ -7723,7 +7944,7 @@
                 const empSnap = await db.collection('employees').where('projectId', '==', project.id).get();
                 empSnap.forEach(doc => {
                     const data = doc.data();
-                    if (data.status !== 'hidden' && data.type === 'daily') allEmployees.push({ id: doc.id, ...data });
+                    if (data.status !== 'hidden') allEmployees.push({ id: doc.id, ...data });
                 });
                 const fromNorm = toYyyyMmDd(fromDate) || fromDate;
                 const toNorm = toYyyyMmDd(toDate) || toDate;
@@ -7738,56 +7959,37 @@
                 });
             }
 
-            // عرض من له حضور في الفترة فقط (نشط أو متوقف)
-            allEmployees = allEmployees.filter(e => Object.prototype.hasOwnProperty.call(allAttendance, e.id) && allAttendance[e.id].length > 0);
+            const fromNorm = toYyyyMmDd(fromDate) || fromDate;
+            const toNorm = toYyyyMmDd(toDate) || toDate;
             
-            const fromDateObj = new Date(fromDate);
-            const reportMonth = fromDateObj.getMonth() + 1;
-            const reportYear = fromDateObj.getFullYear();
+            // موظفون كانوا يوميين في أي جزء من الفترة ولديهم حضور في أيام يومية
+            allEmployees = allEmployees.filter(e => {
+                if (!allAttendance[e.id]?.length) return false;
+                if (!employeeHadTypeInRange(e, fromNorm, toNorm, 'daily')) return false;
+                return allAttendance[e.id].some(att => getEmployeeTypeAtDate(e, att.date) === 'daily');
+            });
             
             let rows = allEmployees.map(emp => {
-                const empAtt = allAttendance[emp.id] || [];
-                
-                let totalNumericDays = 0;          // كل الأيام المؤجورة (معتمدة + غير معتمدة)
-                let totalApprovedNumericDays = 0;  // الأيام المؤجورة المعتمدة فقط
-                
-                empAtt.forEach(att => {
-                    let dayValue = 0;
-                    if (att.status === 'full_day') {
-                        dayValue = 1;
-                    } else if (att.status === 'partial') {
-                        dayValue = att.partialDetails?.remainderExcused === true ? 1 : getPartialEquivalentDays(att);
-                    } else if (att.status === 'shift') {
-                        dayValue = getShiftEquivalentDays(att);
-                    } else if (att.status === 'sickLeave') {
-                        dayValue = att.sickLeaveExcused === false ? 0 : 1;
-                    } else if (['excusedAbsent','annualLeave','emergencyLeave','unpaidLeave','periodicLeave','officialHoliday','onMission'].includes(att.status)) {
-                        dayValue = 1;
-                    } else if (att.status === 'absent') {
-                        dayValue = 0;
-                    }
-                    totalNumericDays += dayValue;
-                    if (att.approved === true) {
-                        totalApprovedNumericDays += dayValue;
-                    }
-                });
-                
-                const wageHistory = emp.wageHistory || [];
-                const monthWage = wageHistory.find(w => w.month === reportMonth && w.year === reportYear);
-                const dailyWage = monthWage ? monthWage.wage : (emp.dailyWage || 0);
-                
-                const approvedWage = roundToNearest250(dailyWage * totalApprovedNumericDays);
-                const potentialWage = roundToNearest250(dailyWage * totalNumericDays);
+                const empAtt = (allAttendance[emp.id] || []).filter(att => getEmployeeTypeAtDate(emp, att.date) === 'daily');
+                const wageTotals = calculateDailyWageTotalsForAttendance(emp, empAtt);
                 
                 const project = projects.find(p => p.id === emp.projectId);
+                const typePeriodNote = hasMixedTypeInRange(emp, fromNorm, toNorm)
+                    ? formatEmployeeTypePeriodsText(emp, fromNorm, toNorm)
+                    : '';
+                
                 return {
                     ...emp,
                     projectName: project?.name || '-',
-                    totalNumericDays,
-                    approvedDays: totalApprovedNumericDays,
-                    dailyWage,
-                    approvedWage,
-                    potentialWage
+                    totalNumericDays: wageTotals.totalNumericDays,
+                    approvedDays: wageTotals.totalApprovedNumericDays,
+                    dailyWage: empAtt.length > 0 ? getEmployeeDailyWageForDate(emp, empAtt[0].date) : (emp.dailyWage || 0),
+                    approvedWage: wageTotals.totalSalary,
+                    potentialWage: roundToNearest250(empAtt.reduce((sum, att) => {
+                        return sum + getEmployeeDailyWageForDate(emp, att.date) * getAttendanceNumericDayValue(att);
+                    }, 0)),
+                    typePeriodNote,
+                    hasMixedType: hasMixedTypeInRange(emp, fromNorm, toNorm)
                 };
             });
             
@@ -7801,6 +8003,7 @@
             rows.sort((a, b) => (a.projectName || '').localeCompare(b.projectName || '') || (a.name || '').localeCompare(b.name || ''));
             const grandApprovedTotal = rows.reduce((sum, r) => sum + r.approvedWage, 0);
             const grandPotentialTotal = rows.reduce((sum, r) => sum + r.potentialWage, 0);
+            const mixedTypeRows = rows.filter(r => r.hasMixedType);
             
             const projectTitle = showAllProjects ? (currentLanguage === 'ar' ? 'جميع المشاريع' : 'All Projects') : (projects[0]?.name || '');
             resultsContainer.innerHTML = `
@@ -7814,10 +8017,18 @@
                     </div>
                     <p class="text-sm text-gray-600 mb-4">
                         ${currentLanguage === 'ar'
-                            ? 'يعرض كل من سُجّل له حضور في الفترة (نشط أو متوقف). الأجر المعتمد = الأجر اليومي × الأيام المؤجورة المعتمدة. الأجر المحتمل = الأجر اليومي × جميع الأيام المؤجورة.'
-                            : 'Shows everyone with attendance in the period (active or inactive). Approved wage = daily wage × approved paid days. Potential wage = daily wage × all paid days.'}
+                            ? 'يعرض من كان يومياً في أي جزء من الفترة. تُحسب الأجور للأيام اليومية فقط (حسب سجل تحويل النوع).'
+                            : 'Shows employees who were daily during any part of the period. Wages count daily days only (per type change history).'}
                     </p>
-                    ${rows.length === 0 ? `<p class="text-gray-500 text-center py-8">${currentLanguage === 'ar' ? 'لا يوجد موظفون يوميون لديهم حضور في الفترة المحددة' : 'No daily employees with attendance in the selected period'}</p>` : `
+                    ${mixedTypeRows.length > 0 ? `
+                    <div class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">
+                        <strong>${t('mixedTypeEmployeesNotice')}</strong>
+                        <ul class="mt-2 space-y-1 list-disc list-inside">
+                            ${mixedTypeRows.map(r => `<li><span class="font-medium">${r.name}</span>: ${r.typePeriodNote}</li>`).join('')}
+                        </ul>
+                    </div>
+                    ` : ''}
+                    ${rows.length === 0 ? `<p class="text-gray-500 text-center py-8">${currentLanguage === 'ar' ? 'لا يوجد موظفون يوميون في الفترة المحددة' : 'No daily employees in the selected period'}</p>` : `
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm">
                             <thead class="bg-gray-50">
@@ -7837,7 +8048,10 @@
                                 ${rows.map(r => `
                                     <tr class="hover:bg-gray-50">
                                         <td class="px-2 py-2 font-mono">${r.code}</td>
-                                        <td class="px-2 py-2 font-medium">${r.name}</td>
+                                        <td class="px-2 py-2 font-medium">
+                                            ${r.name}
+                                            ${r.hasMixedType ? `<div class="text-xs text-amber-700 mt-1">${r.typePeriodNote}</div>` : ''}
+                                        </td>
                                         <td class="px-2 py-2">${r.projectName}</td>
                                         <td class="px-2 py-2 text-center"><span class="px-2 py-0.5 text-xs rounded-full ${r.status === 'active' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600'}">${t(r.status || 'active')}</span></td>
                                         <td class="px-2 py-2 text-center">${r.approvedDays.toFixed(2)}</td>
@@ -8076,15 +8290,15 @@
                 : null;
             const projects = (window.projectsListData || []).filter(p => p.status !== 'hidden' && (!allowedProjectIds || allowedProjectIds.includes(p.id)));
 
-            // جلب الموظفين اليوميين العاميين
+            // جلب الموظفين العاميين الذين كانوا يوميين في أي جزء من الفترة
             const generalEmployeesSnap = await db.collection('employees')
-                .where('type', '==', 'daily')
                 .where('assignmentMode', '==', 'general')
                 .get();
             const employees = [];
             generalEmployeesSnap.forEach(doc => {
                 const data = doc.data();
                 if (data.status === 'hidden') return;
+                if (!employeeHadTypeInRange(data, fromNorm, toNorm, 'daily')) return;
                 if (allowedProjectIds && allowedProjectIds.length > 0) {
                     const ids = data.assignedProjectIds || [];
                     if (!ids.some(pid => allowedProjectIds.includes(pid))) return;
@@ -8102,22 +8316,11 @@
                     if (!dateStr || dateStr < fromNorm || dateStr > toNorm) return;
                     const empId = data.employeeId;
                     if (!empId) return;
-                    if (!employees.find(e => e.id === empId)) return;
+                    const emp = employees.find(e => e.id === empId);
+                    if (!emp) return;
+                    if (getEmployeeTypeAtDate(emp, dateStr) !== 'daily') return;
 
-                    let dayValue = 0;
-                    if (data.status === 'full_day') {
-                        dayValue = 1;
-                    } else if (data.status === 'partial') {
-                        dayValue = data.partialDetails?.remainderExcused === true ? 1 : getPartialEquivalentDays(data);
-                    } else if (data.status === 'shift') {
-                        dayValue = getShiftEquivalentDays(data);
-                    } else if (data.status === 'sickLeave') {
-                        dayValue = data.sickLeaveExcused === false ? 0 : 1;
-                    } else if (['excusedAbsent','annualLeave','emergencyLeave','unpaidLeave','periodicLeave','officialHoliday','onMission'].includes(data.status)) {
-                        dayValue = 1;
-                    } else if (data.status === 'absent') {
-                        dayValue = 0;
-                    }
+                    const dayValue = getAttendanceNumericDayValue(data);
 
                     if (!attendanceByEmployee[empId]) attendanceByEmployee[empId] = {};
                     if (!attendanceByEmployee[empId][p.id]) attendanceByEmployee[empId][p.id] = { allDays: 0, approvedDays: 0 };
@@ -8125,11 +8328,6 @@
                     if (data.approved === true) attendanceByEmployee[empId][p.id].approvedDays += dayValue;
                 });
             }
-
-            // الشهر/السنة لتحديد الأجر (مثل باقي التقارير)
-            const fromDateObj = new Date(fromDate);
-            const reportMonth = fromDateObj.getMonth() + 1;
-            const reportYear = fromDateObj.getFullYear();
 
             const projectIdsInReportSet = new Set();
             employees.forEach(emp => {
@@ -8145,15 +8343,19 @@
                 .filter(e => attendanceByEmployee[e.id] && Object.keys(attendanceByEmployee[e.id]).length > 0)
                 .map(emp => {
                     const perProject = attendanceByEmployee[emp.id] || {};
-                    const wageHistory = emp.wageHistory || [];
-                    const monthWage = wageHistory.find(w => w.month === reportMonth && w.year === reportYear);
-                    const dailyWage = monthWage ? monthWage.wage : (emp.dailyWage || 0);
+                    const typePeriodNote = hasMixedTypeInRange(emp, fromNorm, toNorm)
+                        ? formatEmployeeTypePeriodsText(emp, fromNorm, toNorm)
+                        : '';
 
                     const byProject = {};
                     projectIdsInReport.forEach(pid => {
                         const v = perProject[pid] || { allDays: 0, approvedDays: 0 };
-                        const approvedWage = roundToNearest250(dailyWage * (v.approvedDays || 0));
-                        const potentialWage = roundToNearest250(dailyWage * (v.allDays || 0));
+                        const approvedWage = roundToNearest250(
+                            (v.approvedDays || 0) * getEmployeeDailyWageForDate(emp, fromNorm)
+                        );
+                        const potentialWage = roundToNearest250(
+                            (v.allDays || 0) * getEmployeeDailyWageForDate(emp, fromNorm)
+                        );
                         byProject[pid] = {
                             approvedDays: v.approvedDays || 0,
                             allDays: v.allDays || 0,
@@ -8166,6 +8368,7 @@
                     const totalAllDays = Object.values(byProject).reduce((s, r) => s + (r.allDays || 0), 0);
                     const totalApprovedWage = Object.values(byProject).reduce((s, r) => s + (r.approvedWage || 0), 0);
                     const totalPotentialWage = Object.values(byProject).reduce((s, r) => s + (r.potentialWage || 0), 0);
+                    const dailyWage = getEmployeeDailyWageForDate(emp, fromNorm);
 
                     return {
                         ...emp,
@@ -8174,7 +8377,9 @@
                         totalApprovedDays,
                         totalAllDays,
                         totalApprovedWage,
-                        totalPotentialWage
+                        totalPotentialWage,
+                        typePeriodNote,
+                        hasMixedType: hasMixedTypeInRange(emp, fromNorm, toNorm)
                     };
                 });
 
@@ -8185,6 +8390,7 @@
             rows.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
             const grandApprovedTotal = rows.reduce((sum, r) => sum + r.totalApprovedWage, 0);
             const grandPotentialTotal = rows.reduce((sum, r) => sum + r.totalPotentialWage, 0);
+            const mixedTypeRows = rows.filter(r => r.hasMixedType);
 
             const projectHeaderLabels = projectIdsInReport.map(pid => projects.find(p => p.id === pid)?.name || '-');
             resultsContainer.innerHTML = `
@@ -8196,6 +8402,15 @@
                         </div>
                         <button onclick="printReportInNewTab()" class="no-print px-4 py-2 border rounded-lg hover:bg-gray-100">🖨️ ${t('print')}</button>
                     </div>
+                    <p class="text-sm text-gray-600 mb-4">${t('dailyWageDaysOnly')}</p>
+                    ${mixedTypeRows.length > 0 ? `
+                    <div class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">
+                        <strong>${t('mixedTypeEmployeesNotice')}</strong>
+                        <ul class="mt-2 space-y-1 list-disc list-inside">
+                            ${mixedTypeRows.map(r => `<li><span class="font-medium">${r.name}</span>: ${r.typePeriodNote}</li>`).join('')}
+                        </ul>
+                    </div>
+                    ` : ''}
                     ${rows.length === 0 ? `<p class="text-gray-500 text-center py-8">${currentLanguage === 'ar' ? 'لا توجد بيانات' : 'No data'}</p>` : `
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm">
@@ -8227,7 +8442,10 @@
                                 ${rows.map(r => `
                                     <tr class="hover:bg-gray-50">
                                         <td class="px-2 py-2 font-mono">${r.code || ''}</td>
-                                        <td class="px-2 py-2">${r.name || ''}</td>
+                                        <td class="px-2 py-2">
+                                            ${r.name || ''}
+                                            ${r.hasMixedType ? `<div class="text-xs text-amber-700 mt-1">${r.typePeriodNote}</div>` : ''}
+                                        </td>
                                         <td class="px-2 py-2 text-center"><span class="px-2 py-0.5 text-xs rounded-full ${r.status === 'active' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600'}">${t(r.status || 'active')}</span></td>
                                         <td class="px-2 py-2 text-center">${formatWage(r.dailyWage)}</td>
                                         ${projectIdsInReport.map(pid => {
