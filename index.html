@@ -998,6 +998,17 @@
             typeAtDate: "نوع في التاريخ",
             dailyWageDaysOnly: "يُحسب الأجر اليومي للأيام التي كان فيها الموظف يومياً فقط",
             mixedTypeEmployeesNotice: "موظفون غيّروا نوعهم خلال الفترة:",
+            attendanceReview: "مراجعة وتعديل الدوام",
+            attendanceReviewDesc: "عرض سجلات الحضور من قاعدة البيانات وتعديلها أو حذف التكرارات",
+            duplicateRecord: "سجل مكرر",
+            duplicateRecordsNotice: "تم تمييز السجلات المكررة لنفس اليوم. يُنصح بحذف الزائد.",
+            dedupedRecordsNotice: "تم دمج السجلات المكررة في التقرير (يُعرض الأحدث/المعتمد).",
+            typeChangeAttendanceWarning: "يوجد {count} سجل حضور قبل تاريخ التحويل. قد تظهر في تقارير النوع السابق. هل تريد المتابعة؟",
+            typeChangeDuplicateWarning: "يوجد {count} يوم بسجلات حضور مكررة. يُنصح بمراجعتها من نافذة تعديل الدوام. هل تريد المتابعة؟",
+            deleteRecord: "حذف السجل",
+            confirmDeleteAttendance: "هل أنت متأكد من حذف سجل الحضور هذا؟",
+            recordUpdated: "تم تحديث السجل",
+            recordDeleted: "تم حذف السجل",
             attended: "حضر",
             notAttended: "لم يحضر",
             approved: "تمت الموافقة",
@@ -1363,6 +1374,17 @@
             typeAtDate: "Type on date",
             dailyWageDaysOnly: "Daily wage is calculated only for days when the employee was daily",
             mixedTypeEmployeesNotice: "Employees who changed type during the period:",
+            attendanceReview: "Review & Edit Attendance",
+            attendanceReviewDesc: "View attendance records from the database and edit or remove duplicates",
+            duplicateRecord: "Duplicate",
+            duplicateRecordsNotice: "Duplicate records for the same day are highlighted. Remove extras.",
+            dedupedRecordsNotice: "Duplicate records were merged in the report (newest/approved kept).",
+            typeChangeAttendanceWarning: "There are {count} attendance record(s) before the change date. They may appear in reports for the previous type. Continue?",
+            typeChangeDuplicateWarning: "There are {count} day(s) with duplicate attendance records. Review them in attendance edit. Continue?",
+            deleteRecord: "Delete record",
+            confirmDeleteAttendance: "Are you sure you want to delete this attendance record?",
+            recordUpdated: "Record updated",
+            recordDeleted: "Record deleted",
             attended: "Attended",
             notAttended: "Not Attended",
             approved: "Approved",
@@ -2922,6 +2944,9 @@
                         <button onclick="viewEmployee('${employee.id}')" class="p-1 hover:bg-gray-200 rounded" title="${t('view')}">👁️</button>
                         <button onclick="openEmployeeModal('${employee.id}')" class="p-1 hover:bg-gray-200 rounded" title="${t('edit')}">✏️</button>
                         <button onclick="openTransferModal('${employee.id}')" class="p-1 hover:bg-gray-200 rounded" title="${t('transferRequest')}">🔄</button>
+                        ${(currentUserData.role === 'manager' || currentUserData.role === 'supervisor') ? `
+                        <button onclick="openAttendanceReviewModal('${employee.id}')" class="p-1 hover:bg-gray-200 rounded" title="${t('attendanceReview')}">📋</button>
+                        ` : ''}
                         ${currentUserData.role === 'manager' ? `
                         <button onclick="deleteEmployee('${employee.id}', '${employee.name}')" class="p-1 hover:bg-red-100 rounded text-red-600" title="${t('delete')}">🗑️</button>
                         ` : ''}
@@ -3364,6 +3389,10 @@
                         showToast(t('typeChangeRequired'), 'error');
                         return;
                     }
+                    
+                    const attWarning = await checkTypeChangeAttendanceWarning(id, oldData, type, typeChangeEffectiveDate);
+                    if (attWarning && !attWarning.proceed) return;
+                    
                     employeeData.typeHistory = firebase.firestore.FieldValue.arrayUnion({
                         fromType: oldType,
                         toType: type,
@@ -3591,6 +3620,9 @@
         
         const footer = `
             <button onclick="closeModal()" class="px-4 py-2 border rounded-lg hover:bg-gray-100 transition">${t('close')}</button>
+            ${(currentUserData.role === 'manager' || currentUserData.role === 'supervisor') ? `
+            <button onclick="closeModal(); openAttendanceReviewModal('${employee.id}')" class="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition">${t('attendanceReview')}</button>
+            ` : ''}
             <button onclick="closeModal(); openEmployeeModal('${employee.id}')" class="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">${t('edit')}</button>
         `;
         
@@ -5400,16 +5432,20 @@
         `;
     }
     
-    function canEditAttendance(key) {
-        const existing = attendanceData[key];
-        if (!existing) return true;
-        if (existing.approved === true && currentUserData.role !== 'manager') return false;
+    function canEditAttendanceRecord(record) {
+        if (!record) return true;
+        if (record.approved === true && currentUserData.role !== 'manager') return false;
         if (currentUserData.role === 'approver') return false;
-        if (currentUserData.role === 'supervisor' && existing.id) {
-            const createdAt = existing.createdAt?.toMillis ? existing.createdAt.toMillis() : (existing.createdAt ? new Date(existing.createdAt).getTime() : 0);
+        if (currentUserData.role === 'supervisor' && record.id) {
+            const createdAt = record.createdAt?.toMillis ? record.createdAt.toMillis() : (record.createdAt ? new Date(record.createdAt).getTime() : 0);
             if (createdAt && (Date.now() - createdAt) > 24 * 60 * 60 * 1000) return false;
         }
         return true;
+    }
+    
+    function canEditAttendance(key) {
+        const existing = attendanceData[key];
+        return canEditAttendanceRecord(existing);
     }
     
     async function openAttendancePopup(itemId, itemName, dateStr, type) {
@@ -7201,6 +7237,330 @@
         return t(periods[0]?.type || employee.type || 'daily');
     }
     
+    function getAttendanceDedupeKey(employee, att) {
+        const dateStr = toYyyyMmDd(att.date) || att.date;
+        const empId = employee?.id || att.employeeId || '';
+        const isGeneral = employee?.assignmentMode === 'general';
+        if (isGeneral) return `${empId}_${dateStr}_${att.projectId || ''}`;
+        return `${empId}_${dateStr}`;
+    }
+    
+    function getAttendanceRecordSortScore(rec) {
+        let score = 0;
+        if (rec.approved === true) score += 100;
+        const updated = rec.updatedAt?.toMillis ? rec.updatedAt.toMillis() : (rec.updatedAt ? new Date(rec.updatedAt).getTime() : 0);
+        const created = rec.createdAt?.toMillis ? rec.createdAt.toMillis() : (rec.createdAt ? new Date(rec.createdAt).getTime() : 0);
+        return score + (updated || created) / 1e15;
+    }
+    
+    function dedupeAttendanceRecords(records, employee) {
+        const sorted = [...records].sort((a, b) => getAttendanceRecordSortScore(b) - getAttendanceRecordSortScore(a));
+        const seen = new Map();
+        const duplicates = [];
+        sorted.forEach(rec => {
+            const key = getAttendanceDedupeKey(employee, rec);
+            if (!seen.has(key)) {
+                seen.set(key, rec);
+            } else {
+                duplicates.push(rec);
+            }
+        });
+        return { records: Array.from(seen.values()), duplicates };
+    }
+    
+    function findDuplicateAttendanceDayKeys(records, employee) {
+        const counts = {};
+        records.forEach(rec => {
+            const key = getAttendanceDedupeKey(employee, rec);
+            counts[key] = (counts[key] || 0) + 1;
+        });
+        return new Set(Object.keys(counts).filter(k => counts[k] > 1));
+    }
+    
+    function filterAttendanceForReport(records, employee, typeFilter) {
+        let filtered = [...records];
+        if (typeFilter === 'daily' || typeFilter === 'monthly') {
+            filtered = filtered.filter(att => getEmployeeTypeAtDate(employee, att.date) === typeFilter);
+        }
+        return dedupeAttendanceRecords(filtered, employee);
+    }
+    
+    async function checkTypeChangeAttendanceWarning(employeeId, oldEmployeeData, newType, effectiveDate) {
+        const attSnap = await db.collection('attendance').where('employeeId', '==', employeeId).get();
+        const records = [];
+        attSnap.forEach(doc => records.push({ id: doc.id, ...doc.data(), date: toYyyyMmDd(doc.data().date) || doc.data().date }));
+        
+        const effectiveNorm = toYyyyMmDd(effectiveDate) || effectiveDate;
+        const beforeCount = records.filter(r => r.date && r.date < effectiveNorm).length;
+        const dupKeys = findDuplicateAttendanceDayKeys(records, { id: employeeId, ...oldEmployeeData });
+        
+        const messages = [];
+        if (beforeCount > 0) {
+            messages.push(t('typeChangeAttendanceWarning').replace('{count}', beforeCount));
+        }
+        if (dupKeys.size > 0) {
+            messages.push(t('typeChangeDuplicateWarning').replace('{count}', dupKeys.size));
+        }
+        if (messages.length === 0) return { proceed: true };
+        
+        const confirmed = confirm(messages.join('\n\n'));
+        return { proceed: confirmed };
+    }
+    
+    async function openAttendanceReviewModal(employeeId = null) {
+        let employees = window.employeesData || [];
+        if (employees.length === 0) {
+            const snap = await db.collection('employees').get();
+            employees = [];
+            snap.forEach(doc => {
+                const data = doc.data();
+                if (data.status !== 'hidden') employees.push({ id: doc.id, ...data });
+            });
+            window.employeesData = employees;
+        }
+        
+        const today = new Date();
+        const monthStart = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
+        const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+        const monthEnd = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+        
+        const content = `
+            <div class="space-y-4">
+                <p class="text-sm text-gray-600">${t('attendanceReviewDesc')}</p>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">${t('employees')} *</label>
+                        <select id="att-review-employee" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500">
+                            <option value="">${t('select')}</option>
+                            ${employees.sort((a, b) => (a.name || '').localeCompare(b.name || '')).map(e => `
+                                <option value="${e.id}" ${e.id === employeeId ? 'selected' : ''}>${e.name} (${e.code})</option>
+                            `).join('')}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">${t('from')}</label>
+                        <input type="date" id="att-review-from" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500" value="${monthStart}">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">${t('to')}</label>
+                        <input type="date" id="att-review-to" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500" value="${monthEnd}">
+                    </div>
+                </div>
+                <button onclick="loadAttendanceReviewTable()" class="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">
+                    ${t('view')}
+                </button>
+                <div id="att-review-results"></div>
+            </div>
+        `;
+        
+        openModal(t('attendanceReview'), content, `
+            <button onclick="closeModal()" class="px-4 py-2 border rounded-lg hover:bg-gray-100 transition">${t('close')}</button>
+        `, 'max-w-5xl');
+        
+        if (employeeId) setTimeout(() => loadAttendanceReviewTable(), 150);
+    }
+    
+    async function loadAttendanceReviewTable() {
+        const resultsEl = document.getElementById('att-review-results');
+        if (!resultsEl) return;
+        
+        const employeeId = document.getElementById('att-review-employee')?.value;
+        const fromDate = document.getElementById('att-review-from')?.value;
+        const toDate = document.getElementById('att-review-to')?.value;
+        
+        if (!employeeId || !fromDate || !toDate) {
+            showToast(t('required'), 'error');
+            return;
+        }
+        
+        resultsEl.innerHTML = `<div class="text-center py-6"><div class="loader mx-auto"></div></div>`;
+        
+        try {
+            const empDoc = await db.collection('employees').doc(employeeId).get();
+            if (!empDoc.exists) {
+                resultsEl.innerHTML = `<p class="text-red-500 text-center py-4">${t('error')}</p>`;
+                return;
+            }
+            const employee = { id: empDoc.id, ...empDoc.data() };
+            const projects = window.projectsListData || [];
+            const projectById = (id) => projects.find(p => p.id === id);
+            
+            const fromNorm = toYyyyMmDd(fromDate) || fromDate;
+            const toNorm = toYyyyMmDd(toDate) || toDate;
+            
+            const attSnap = await db.collection('attendance').where('employeeId', '==', employeeId).get();
+            const records = [];
+            attSnap.forEach(doc => {
+                const data = doc.data();
+                const dateStr = toYyyyMmDd(data.date);
+                if (dateStr && dateStr >= fromNorm && dateStr <= toNorm) {
+                    records.push({ id: doc.id, ...data, date: dateStr });
+                }
+            });
+            
+            records.sort((a, b) => {
+                const c = a.date.localeCompare(b.date);
+                if (c !== 0) return c;
+                return (projectById(a.projectId)?.name || a.projectId || '').localeCompare(projectById(b.projectId)?.name || b.projectId || '');
+            });
+            
+            const dupKeys = findDuplicateAttendanceDayKeys(records, employee);
+            
+            if (records.length === 0) {
+                resultsEl.innerHTML = `<p class="text-gray-500 text-center py-6">${currentLanguage === 'ar' ? 'لا توجد سجلات في هذه الفترة' : 'No records in this period'}</p>`;
+                return;
+            }
+            
+            resultsEl.innerHTML = `
+                ${dupKeys.size > 0 ? `
+                <div class="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">
+                    ${t('duplicateRecordsNotice')} (${dupKeys.size})
+                </div>
+                ` : ''}
+                ${renderEmployeeTypePeriodsNotice(employee, fromNorm, toNorm)}
+                <div class="overflow-x-auto max-h-[28rem] border rounded-lg">
+                    <table class="w-full text-sm">
+                        <thead class="bg-gray-50 sticky top-0">
+                            <tr>
+                                <th class="px-3 py-2 text-right">${t('date')}</th>
+                                <th class="px-3 py-2 text-right">${t('projects')}</th>
+                                <th class="px-3 py-2 text-right">${t('typeAtDate')}</th>
+                                <th class="px-3 py-2 text-right">${t('status')}</th>
+                                <th class="px-3 py-2 text-center">${t('approved')}</th>
+                                <th class="px-3 py-2 text-right">${t('notes')}</th>
+                                <th class="px-3 py-2 text-center">${t('actions')}</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y">
+                            ${records.map(rec => {
+                                const isDup = dupKeys.has(getAttendanceDedupeKey(employee, rec));
+                                const statusInfo = attendanceStatuses.employee.find(s => s.key === rec.status);
+                                const attType = getEmployeeTypeAtDate(employee, rec.date);
+                                const canEdit = canEditAttendanceRecord(rec);
+                                return `
+                                    <tr class="${isDup ? 'bg-amber-50' : 'hover:bg-gray-50'}">
+                                        <td class="px-3 py-2">
+                                            ${formatDate(new Date(rec.date + 'T12:00:00'))}
+                                            ${isDup ? `<span class="block text-xs text-amber-700">${t('duplicateRecord')}</span>` : ''}
+                                        </td>
+                                        <td class="px-3 py-2">${projectById(rec.projectId)?.name || rec.projectId || '-'}</td>
+                                        <td class="px-3 py-2"><span class="px-2 py-0.5 text-xs rounded-full ${attType === 'daily' ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'}">${t(attType)}</span></td>
+                                        <td class="px-3 py-2">${statusInfo?.icon || ''} ${t(rec.status)}</td>
+                                        <td class="px-3 py-2 text-center">${rec.approved === true ? '✓' : '○'}</td>
+                                        <td class="px-3 py-2 text-gray-500 max-w-[120px] truncate" title="${(rec.note || '').replace(/"/g, '&quot;')}">${rec.note || '-'}</td>
+                                        <td class="px-3 py-2 text-center whitespace-nowrap">
+                                            ${canEdit ? `
+                                            <button onclick="openAttendanceReviewEdit('${rec.id}')" class="px-2 py-1 text-xs border rounded hover:bg-gray-100">${t('edit')}</button>
+                                            <button onclick="deleteAttendanceReviewRecord('${rec.id}')" class="px-2 py-1 text-xs border border-red-200 text-red-600 rounded hover:bg-red-50">${t('delete')}</button>
+                                            ` : `<span class="text-xs text-gray-400">${currentLanguage === 'ar' ? 'مقفل' : 'Locked'}</span>`}
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+                <p class="text-xs text-gray-500 mt-2">${records.length} ${currentLanguage === 'ar' ? 'سجل' : 'record(s)'}</p>
+            `;
+        } catch (err) {
+            console.error('loadAttendanceReviewTable:', err);
+            resultsEl.innerHTML = `<p class="text-red-500 text-center py-4">${t('error')}</p>`;
+        }
+    }
+    
+    async function openAttendanceReviewEdit(docId) {
+        const doc = await db.collection('attendance').doc(docId).get();
+        if (!doc.exists) {
+            showToast(t('error'), 'error');
+            return;
+        }
+        const record = { id: doc.id, ...doc.data() };
+        if (!canEditAttendanceRecord(record)) {
+            showToast(currentUserData.role === 'supervisor' ? t('cannotEditAfter24h') : t('onlyManagerCanEditApproved'), 'error');
+            return;
+        }
+        
+        const statuses = attendanceStatuses.employee.filter(s => s.key !== 'shift' || getEmployeeTypeAtDate(
+            window.employeesData?.find(e => e.id === record.employeeId) || { type: 'daily' },
+            toYyyyMmDd(record.date) || record.date
+        ) === 'daily');
+        
+        const content = `
+            <div class="space-y-4">
+                <p class="text-sm text-gray-600">${formatDate(new Date((toYyyyMmDd(record.date) || record.date) + 'T12:00:00'))}</p>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">${t('status')}</label>
+                    <select id="att-review-edit-status" class="w-full px-4 py-2 border rounded-lg">
+                        ${statuses.map(s => `<option value="${s.key}" ${record.status === s.key ? 'selected' : ''}>${s.icon} ${t(s.key)}</option>`).join('')}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">${t('notes')}</label>
+                    <textarea id="att-review-edit-note" class="w-full px-4 py-2 border rounded-lg" rows="2">${record.note || ''}</textarea>
+                </div>
+            </div>
+        `;
+        
+        openModal(t('edit'), content, `
+            <button onclick="closeModal(); openAttendanceReviewModal('${record.employeeId}')" class="px-4 py-2 border rounded-lg hover:bg-gray-100">${t('cancel')}</button>
+            <button onclick="saveAttendanceReviewEdit('${docId}')" class="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">${t('save')}</button>
+        `);
+    }
+    
+    async function saveAttendanceReviewEdit(docId) {
+        const status = document.getElementById('att-review-edit-status')?.value;
+        const note = document.getElementById('att-review-edit-note')?.value || '';
+        if (!status) return;
+        
+        try {
+            const doc = await db.collection('attendance').doc(docId).get();
+            if (!doc.exists) return;
+            const record = { id: doc.id, ...doc.data() };
+            if (!canEditAttendanceRecord(record)) {
+                showToast(t('error'), 'error');
+                return;
+            }
+            
+            await db.collection('attendance').doc(docId).update({
+                status,
+                note,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                updatedBy: currentUser.uid
+            });
+            
+            logActivity('update', 'attendance', docId, record.employeeId, (currentLanguage === 'ar' ? 'تعديل حضور من مراجعة الدوام' : 'Attendance edited from review') + ` — ${toYyyyMmDd(record.date) || record.date}`);
+            showToast(t('recordUpdated'), 'success');
+            closeModal();
+            openAttendanceReviewModal(record.employeeId);
+        } catch (err) {
+            console.error('saveAttendanceReviewEdit:', err);
+            showToast(t('error'), 'error');
+        }
+    }
+    
+    async function deleteAttendanceReviewRecord(docId) {
+        if (!confirm(t('confirmDeleteAttendance'))) return;
+        
+        try {
+            const doc = await db.collection('attendance').doc(docId).get();
+            if (!doc.exists) return;
+            const record = { id: doc.id, ...doc.data() };
+            if (!canEditAttendanceRecord(record)) {
+                showToast(t('error'), 'error');
+                return;
+            }
+            
+            const employeeId = record.employeeId;
+            await db.collection('attendance').doc(docId).delete();
+            logActivity('delete', 'attendance', docId, employeeId, (currentLanguage === 'ar' ? 'حذف حضور من مراجعة الدوام' : 'Attendance deleted from review') + ` — ${toYyyyMmDd(record.date) || record.date}`);
+            showToast(t('recordDeleted'), 'success');
+            loadAttendanceReviewTable();
+        } catch (err) {
+            console.error('deleteAttendanceReviewRecord:', err);
+            showToast(t('error'), 'error');
+        }
+    }
+    
     function getAttendanceNumericDayValue(att) {
         if (att.status === 'full_day') return 1;
         if (att.status === 'partial') return att.partialDetails?.remainderExcused === true ? 1 : getPartialEquivalentDays(att);
@@ -7336,7 +7696,9 @@
             const vehicleAttendance = allVehicleAttendance;
             
             const employeeStats = employees.map(emp => {
-                const empAtt = attendance[emp.id] || [];
+                const rawAtt = attendance[emp.id] || [];
+                const typeFilterForStats = (employeeTypeFilter === 'daily' || employeeTypeFilter === 'monthly') ? employeeTypeFilter : 'all';
+                const { records: empAtt } = filterAttendanceForReport(rawAtt, emp, typeFilterForStats);
                 const fullDay = empAtt.filter(a => a.status === 'full_day').length;
                 const partialRecords = empAtt.filter(a => a.status === 'partial');
                 const partialCount = partialRecords.length;
@@ -7554,6 +7916,11 @@
                     <p class="text-sm text-gray-600 mb-4 no-print-stats">${t('excusedAttendance')} + ${t('unexcusedAttendance')} = ${t('daysInPeriod')} (${daysInPeriod})</p>
                     <p class="text-sm text-gray-600 mb-4 no-print-stats">${t('reportApprovalNote')} ✓ ${t('approvedRecords')}: ${totals.approvedRecords} | ${t('unapprovedRecords')}: ${totals.unapprovedRecords}</p>
                     <p class="text-sm text-gray-600 mb-4 no-print-stats">${t('actualAttendanceNote')}</p>
+                    ${(employeeTypeFilter === 'daily' || employeeTypeFilter === 'monthly') ? `
+                    <p class="text-sm text-blue-700 mb-4 no-print-stats">${currentLanguage === 'ar'
+                        ? 'تُحسب سجلات الحضور فقط للأيام التي كان فيها الموظف «' + t(employeeTypeFilter) + '» (حسب سجل تحويل النوع).'
+                        : 'Attendance is counted only for days when the employee was «' + t(employeeTypeFilter) + '» (per type change history).'}</p>
+                    ` : ''}
                     ${mixedTypeEmployees.length > 0 ? `
                     <div class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900 no-print-stats">
                         <strong>${t('mixedTypeEmployeesNotice')}</strong>
@@ -7726,6 +8093,10 @@
                 }
             });
             
+            const { records: dedupedAttendance, duplicates: duplicateRecords } = dedupeAttendanceRecords(attendance, employee);
+            attendance.length = 0;
+            dedupedAttendance.forEach(r => attendance.push(r));
+            
             const typePeriods = getEmployeeTypePeriodsInRange(employee, fromNorm, toNorm);
             const showTypeColumn = hasMixedTypeInRange(employee, fromNorm, toNorm);
             const headerTypeLabel = hasMixedTypeInRange(employee, fromNorm, toNorm)
@@ -7800,6 +8171,15 @@
                     </div>
                     
                     ${renderEmployeeTypePeriodsNotice(employee, fromNorm, toNorm)}
+                    
+                    ${duplicateRecords.length > 0 ? `
+                    <div class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900 no-print-stats">
+                        ${t('dedupedRecordsNotice')} (${duplicateRecords.length} ${currentLanguage === 'ar' ? 'مكرر' : 'duplicate(s)'})
+                        ${(currentUserData.role === 'manager' || currentUserData.role === 'supervisor') ? `
+                        <button onclick="openAttendanceReviewModal('${employee.id}')" class="mt-2 text-amber-800 underline text-sm">${t('attendanceReview')}</button>
+                        ` : ''}
+                    </div>
+                    ` : ''}
                     
                     ${(employee.note || '').trim() ? `
                     <div class="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
@@ -7970,7 +8350,7 @@
             });
             
             let rows = allEmployees.map(emp => {
-                const empAtt = (allAttendance[emp.id] || []).filter(att => getEmployeeTypeAtDate(emp, att.date) === 'daily');
+                const { records: empAtt } = filterAttendanceForReport(allAttendance[emp.id] || [], emp, 'daily');
                 const wageTotals = calculateDailyWageTotalsForAttendance(emp, empAtt);
                 
                 const project = projects.find(p => p.id === emp.projectId);
@@ -8308,6 +8688,7 @@
 
             // attendanceByEmployee[empId][projectId] = { allDays, approvedDays }
             const attendanceByEmployee = {};
+            const generalAttBest = {};
             for (const p of projects) {
                 const attSnap = await db.collection('attendance').where('projectId', '==', p.id).get();
                 attSnap.forEach(doc => {
@@ -8320,14 +8701,23 @@
                     if (!emp) return;
                     if (getEmployeeTypeAtDate(emp, dateStr) !== 'daily') return;
 
-                    const dayValue = getAttendanceNumericDayValue(data);
-
-                    if (!attendanceByEmployee[empId]) attendanceByEmployee[empId] = {};
-                    if (!attendanceByEmployee[empId][p.id]) attendanceByEmployee[empId][p.id] = { allDays: 0, approvedDays: 0 };
-                    attendanceByEmployee[empId][p.id].allDays += dayValue;
-                    if (data.approved === true) attendanceByEmployee[empId][p.id].approvedDays += dayValue;
+                    const procKey = `${empId}_${p.id}_${dateStr}`;
+                    const rec = { id: doc.id, ...data, date: dateStr };
+                    const existing = generalAttBest[procKey];
+                    if (existing && getAttendanceRecordSortScore(rec) <= getAttendanceRecordSortScore(existing)) return;
+                    generalAttBest[procKey] = rec;
                 });
             }
+            
+            Object.values(generalAttBest).forEach(rec => {
+                const empId = rec.employeeId;
+                const pid = rec.projectId;
+                const dayValue = getAttendanceNumericDayValue(rec);
+                if (!attendanceByEmployee[empId]) attendanceByEmployee[empId] = {};
+                if (!attendanceByEmployee[empId][pid]) attendanceByEmployee[empId][pid] = { allDays: 0, approvedDays: 0 };
+                attendanceByEmployee[empId][pid].allDays += dayValue;
+                if (rec.approved === true) attendanceByEmployee[empId][pid].approvedDays += dayValue;
+            });
 
             const projectIdsInReportSet = new Set();
             employees.forEach(emp => {
