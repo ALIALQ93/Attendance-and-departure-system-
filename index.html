@@ -1009,6 +1009,12 @@
             confirmDeleteAttendance: "هل أنت متأكد من حذف سجل الحضور هذا؟",
             recordUpdated: "تم تحديث السجل",
             recordDeleted: "تم حذف السجل",
+            showProjectDetails: "إظهار تفاصيل المشاريع",
+            totalsOnly: "إجماليات فقط",
+            useTypeFromHistory: "حسب سجل تحويل النوع",
+            typeOverrideHint: "يُستخدم في التقارير لهذا اليوم فقط. اختر «حسب سجل التحويل» للعودة للنوع المحسوب من التاريخ.",
+            typeOverrideBadge: "نوع معدّل",
+            typeAtHistoryDefault: "النوع من السجل",
             attended: "حضر",
             notAttended: "لم يحضر",
             approved: "تمت الموافقة",
@@ -1385,6 +1391,12 @@
             confirmDeleteAttendance: "Are you sure you want to delete this attendance record?",
             recordUpdated: "Record updated",
             recordDeleted: "Record deleted",
+            showProjectDetails: "Show project details",
+            totalsOnly: "Totals only",
+            useTypeFromHistory: "From type change history",
+            typeOverrideHint: "Used in reports for this day only. Choose «From type change history» to revert to the calculated type.",
+            typeOverrideBadge: "Type overridden",
+            typeAtHistoryDefault: "Type from history",
             attended: "Attended",
             notAttended: "Not Attended",
             approved: "Approved",
@@ -3402,6 +3414,37 @@
                         changedByName: currentUserData?.name || currentUser.email || '',
                         changedAt: new Date()
                     });
+                    
+                    // عند التحويل من يومي: حفظ آخر أجر يومي في سجل الأجور لأشهر العمل اليومي
+                    if (oldType === 'daily' && type !== 'daily') {
+                        const lastDailyWage = oldDailyWage ?? oldData?.dailyWage;
+                        if (lastDailyWage != null && !isNaN(lastDailyWage)) {
+                            const wageHistory = [...(oldData?.wageHistory || [])];
+                            const effectiveNorm = toYyyyMmDd(typeChangeEffectiveDate) || typeChangeEffectiveDate;
+                            const dayBefore = addDaysToYyyyMmDd(effectiveNorm, -1);
+                            const monthsToSnapshot = new Set();
+                            if (dayBefore) {
+                                const bp = dayBefore.split('-').map(Number);
+                                monthsToSnapshot.add(`${bp[0]}-${bp[1]}`);
+                            }
+                            const ep = effectiveNorm.split('-').map(Number);
+                            monthsToSnapshot.add(`${ep[0]}-${ep[1]}`);
+                            monthsToSnapshot.forEach(ym => {
+                                const [y, m] = ym.split('-').map(Number);
+                                if (!wageHistory.some(w => w.month === m && w.year === y)) {
+                                    wageHistory.push({
+                                        month: m,
+                                        year: y,
+                                        wage: lastDailyWage,
+                                        createdAt: new Date(),
+                                        updatedAt: new Date(),
+                                        source: 'typeChangeSnapshot'
+                                    });
+                                }
+                            });
+                            employeeData.wageHistory = wageHistory;
+                        }
+                    }
                 }
                 
                 // إدارة سجل الأجور: إذا تغير الأجر اليومي، نضيف سجل جديد
@@ -6925,6 +6968,10 @@
                                 <input type="checkbox" id="report-general-wages-hide-zero-wage" class="rounded text-primary-600">
                                 <span class="text-sm text-gray-700">${currentLanguage === 'ar' ? 'إخفاء من لا يملكون أجر' : 'Hide items with zero wage'}</span>
                             </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" id="report-general-wages-show-projects" class="rounded text-primary-600" checked>
+                                <span class="text-sm text-gray-700">${t('showProjectDetails')}</span>
+                            </label>
                             <button onclick="generateGeneralDailyWagesReport()" class="w-full py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">
                                 ${t('view')} ${currentLanguage === 'ar' ? 'تقرير أجور العاميين (موظفين)' : 'General wages (daily employees)'}
                             </button>
@@ -6951,6 +6998,10 @@
                             <label class="flex items-center gap-2 cursor-pointer">
                                 <input type="checkbox" id="report-general-vehicle-wages-hide-zero-wage" class="rounded text-primary-600">
                                 <span class="text-sm text-gray-700">${currentLanguage === 'ar' ? 'إخفاء من لا يملكون أجر' : 'Hide items with zero wage'}</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" id="report-general-vehicle-wages-show-projects" class="rounded text-primary-600" checked>
+                                <span class="text-sm text-gray-700">${t('showProjectDetails')}</span>
                             </label>
                             <button onclick="generateGeneralVehicleWagesReport()" class="w-full py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">
                                 ${t('view')} ${currentLanguage === 'ar' ? 'تقرير أجور العاميين (آليات)' : 'General wages (vehicles)'}
@@ -7160,6 +7211,13 @@
         return applicable ? applicable.toType : changes[0].fromType;
     }
     
+    function getEffectiveEmployeeTypeForAttendance(employee, att) {
+        const override = att?.employeeTypeAtRecord;
+        if (override === 'daily' || override === 'monthly') return override;
+        const dateStr = att?.date || att;
+        return getEmployeeTypeAtDate(employee, dateStr);
+    }
+    
     function getEmployeeTypePeriodsInRange(employee, fromDate, toDate) {
         const fromNorm = toYyyyMmDd(fromDate) || fromDate;
         const toNorm = toYyyyMmDd(toDate) || toDate;
@@ -7280,7 +7338,7 @@
     function filterAttendanceForReport(records, employee, typeFilter) {
         let filtered = [...records];
         if (typeFilter === 'daily' || typeFilter === 'monthly') {
-            filtered = filtered.filter(att => getEmployeeTypeAtDate(employee, att.date) === typeFilter);
+            filtered = filtered.filter(att => getEffectiveEmployeeTypeForAttendance(employee, att) === typeFilter);
         }
         return dedupeAttendanceRecords(filtered, employee);
     }
@@ -7435,7 +7493,9 @@
                             ${records.map(rec => {
                                 const isDup = dupKeys.has(getAttendanceDedupeKey(employee, rec));
                                 const statusInfo = attendanceStatuses.employee.find(s => s.key === rec.status);
-                                const attType = getEmployeeTypeAtDate(employee, rec.date);
+                                const historyType = getEmployeeTypeAtDate(employee, rec.date);
+                                const attType = getEffectiveEmployeeTypeForAttendance(employee, rec);
+                                const hasTypeOverride = rec.employeeTypeAtRecord === 'daily' || rec.employeeTypeAtRecord === 'monthly';
                                 const canEdit = canEditAttendanceRecord(rec);
                                 return `
                                     <tr class="${isDup ? 'bg-amber-50' : 'hover:bg-gray-50'}">
@@ -7444,7 +7504,21 @@
                                             ${isDup ? `<span class="block text-xs text-amber-700">${t('duplicateRecord')}</span>` : ''}
                                         </td>
                                         <td class="px-3 py-2">${projectById(rec.projectId)?.name || rec.projectId || '-'}</td>
-                                        <td class="px-3 py-2"><span class="px-2 py-0.5 text-xs rounded-full ${attType === 'daily' ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'}">${t(attType)}</span></td>
+                                        <td class="px-3 py-2">
+                                            ${canEdit ? `
+                                            <select onchange="saveAttendanceReviewType('${rec.id}', this.value)"
+                                                    class="text-xs border rounded px-1 py-1 min-w-[100px] ${hasTypeOverride ? 'border-amber-400 bg-amber-50' : ''}"
+                                                    title="${t('typeOverrideHint')}">
+                                                <option value="__history__" ${!hasTypeOverride ? 'selected' : ''}>${t('useTypeFromHistory')} (${t(historyType)})</option>
+                                                <option value="daily" ${hasTypeOverride && rec.employeeTypeAtRecord === 'daily' ? 'selected' : ''}>${t('daily')}</option>
+                                                <option value="monthly" ${hasTypeOverride && rec.employeeTypeAtRecord === 'monthly' ? 'selected' : ''}>${t('monthly')}</option>
+                                            </select>
+                                            ${hasTypeOverride ? `<span class="block text-xs text-amber-700 mt-0.5">${t('typeOverrideBadge')}</span>` : ''}
+                                            ` : `
+                                            <span class="px-2 py-0.5 text-xs rounded-full ${attType === 'daily' ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'}">${t(attType)}</span>
+                                            ${hasTypeOverride ? `<span class="block text-xs text-amber-700">${t('typeOverrideBadge')}</span>` : ''}
+                                            `}
+                                        </td>
                                         <td class="px-3 py-2">${statusInfo?.icon || ''} ${t(rec.status)}</td>
                                         <td class="px-3 py-2 text-center">${rec.approved === true ? '✓' : '○'}</td>
                                         <td class="px-3 py-2 text-gray-500 max-w-[120px] truncate" title="${(rec.note || '').replace(/"/g, '&quot;')}">${rec.note || '-'}</td>
@@ -7474,20 +7548,32 @@
             showToast(t('error'), 'error');
             return;
         }
-        const record = { id: doc.id, ...doc.data() };
+        const record = { id: doc.id, ...doc.data(), date: toYyyyMmDd(doc.data().date) || doc.data().date };
         if (!canEditAttendanceRecord(record)) {
             showToast(currentUserData.role === 'supervisor' ? t('cannotEditAfter24h') : t('onlyManagerCanEditApproved'), 'error');
             return;
         }
         
-        const statuses = attendanceStatuses.employee.filter(s => s.key !== 'shift' || getEmployeeTypeAtDate(
-            window.employeesData?.find(e => e.id === record.employeeId) || { type: 'daily' },
-            toYyyyMmDd(record.date) || record.date
-        ) === 'daily');
+        const empDoc = await db.collection('employees').doc(record.employeeId).get();
+        const employee = empDoc.exists ? { id: empDoc.id, ...empDoc.data() } : { type: 'daily' };
+        const historyType = getEmployeeTypeAtDate(employee, record.date);
+        const hasOverride = record.employeeTypeAtRecord === 'daily' || record.employeeTypeAtRecord === 'monthly';
+        const effectiveType = getEffectiveEmployeeTypeForAttendance(employee, record);
+        
+        const statuses = attendanceStatuses.employee.filter(s => s.key !== 'shift' || effectiveType === 'daily');
         
         const content = `
             <div class="space-y-4">
-                <p class="text-sm text-gray-600">${formatDate(new Date((toYyyyMmDd(record.date) || record.date) + 'T12:00:00'))}</p>
+                <p class="text-sm text-gray-600">${formatDate(new Date(record.date + 'T12:00:00'))}</p>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">${t('typeAtDate')}</label>
+                    <select id="att-review-edit-type" class="w-full px-4 py-2 border rounded-lg">
+                        <option value="__history__" ${!hasOverride ? 'selected' : ''}>${t('useTypeFromHistory')} — ${t(historyType)}</option>
+                        <option value="daily" ${hasOverride && record.employeeTypeAtRecord === 'daily' ? 'selected' : ''}>${t('daily')}</option>
+                        <option value="monthly" ${hasOverride && record.employeeTypeAtRecord === 'monthly' ? 'selected' : ''}>${t('monthly')}</option>
+                    </select>
+                    <p class="text-xs text-gray-500 mt-1">${t('typeOverrideHint')}</p>
+                </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">${t('status')}</label>
                     <select id="att-review-edit-status" class="w-full px-4 py-2 border rounded-lg">
@@ -7507,28 +7593,82 @@
         `);
     }
     
+    function buildAttendanceTypeUpdate(typeValue, historyType) {
+        if (typeValue === '__history__' || !typeValue || typeValue === historyType) {
+            return { employeeTypeAtRecord: firebase.firestore.FieldValue.delete() };
+        }
+        if (typeValue === 'daily' || typeValue === 'monthly') {
+            return { employeeTypeAtRecord: typeValue };
+        }
+        return {};
+    }
+    
+    async function saveAttendanceReviewType(docId, typeValue) {
+        try {
+            const doc = await db.collection('attendance').doc(docId).get();
+            if (!doc.exists) return;
+            const record = { id: doc.id, ...doc.data(), date: toYyyyMmDd(doc.data().date) || doc.data().date };
+            if (!canEditAttendanceRecord(record)) {
+                showToast(t('error'), 'error');
+                loadAttendanceReviewTable();
+                return;
+            }
+            
+            const empDoc = await db.collection('employees').doc(record.employeeId).get();
+            const employee = empDoc.exists ? { id: empDoc.id, ...empDoc.data() } : { type: 'daily' };
+            const historyType = getEmployeeTypeAtDate(employee, record.date);
+            const typeUpdate = buildAttendanceTypeUpdate(typeValue, historyType);
+            
+            await db.collection('attendance').doc(docId).update({
+                ...typeUpdate,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                updatedBy: currentUser.uid
+            });
+            
+            const newType = (typeValue === 'daily' || typeValue === 'monthly') && typeValue !== historyType
+                ? typeValue
+                : historyType;
+            logActivity('update', 'attendance', docId, record.employeeId,
+                (currentLanguage === 'ar' ? 'تعديل نوع السجل في التاريخ' : 'Attendance type on date updated')
+                + ` — ${record.date}: ${t(newType)}`);
+            showToast(t('recordUpdated'), 'success');
+            loadAttendanceReviewTable();
+        } catch (err) {
+            console.error('saveAttendanceReviewType:', err);
+            showToast(t('error'), 'error');
+            loadAttendanceReviewTable();
+        }
+    }
+    
     async function saveAttendanceReviewEdit(docId) {
         const status = document.getElementById('att-review-edit-status')?.value;
         const note = document.getElementById('att-review-edit-note')?.value || '';
+        const typeValue = document.getElementById('att-review-edit-type')?.value || '__history__';
         if (!status) return;
         
         try {
             const doc = await db.collection('attendance').doc(docId).get();
             if (!doc.exists) return;
-            const record = { id: doc.id, ...doc.data() };
+            const record = { id: doc.id, ...doc.data(), date: toYyyyMmDd(doc.data().date) || doc.data().date };
             if (!canEditAttendanceRecord(record)) {
                 showToast(t('error'), 'error');
                 return;
             }
             
+            const empDoc = await db.collection('employees').doc(record.employeeId).get();
+            const employee = empDoc.exists ? { id: empDoc.id, ...empDoc.data() } : { type: 'daily' };
+            const historyType = getEmployeeTypeAtDate(employee, record.date);
+            const typeUpdate = buildAttendanceTypeUpdate(typeValue, historyType);
+            
             await db.collection('attendance').doc(docId).update({
                 status,
                 note,
+                ...typeUpdate,
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
                 updatedBy: currentUser.uid
             });
             
-            logActivity('update', 'attendance', docId, record.employeeId, (currentLanguage === 'ar' ? 'تعديل حضور من مراجعة الدوام' : 'Attendance edited from review') + ` — ${toYyyyMmDd(record.date) || record.date}`);
+            logActivity('update', 'attendance', docId, record.employeeId, (currentLanguage === 'ar' ? 'تعديل حضور من مراجعة الدوام' : 'Attendance edited from review') + ` — ${record.date}`);
             showToast(t('recordUpdated'), 'success');
             closeModal();
             openAttendanceReviewModal(record.employeeId);
@@ -7571,15 +7711,78 @@
         return 0;
     }
     
-    function getEmployeeDailyWageForDate(employee, dateStr) {
+    function getWageHistoryMonthKey(year, month) {
+        return year * 100 + month;
+    }
+    
+    function getEmployeeDailyWageForDate(employee, dateStr, att) {
         const dateNorm = toYyyyMmDd(dateStr) || dateStr;
-        if (!dateNorm) return employee?.dailyWage || 0;
+        if (!dateNorm) return 0;
+        
+        if (att) {
+            if (getEffectiveEmployeeTypeForAttendance(employee, att) !== 'daily') return 0;
+        } else if (getEmployeeTypeAtDate(employee, dateNorm) !== 'daily') {
+            return 0;
+        }
+        
         const parts = dateNorm.split('-').map(Number);
         const month = parts[1];
         const year = parts[0];
-        const wageHistory = employee.wageHistory || [];
-        const monthWage = wageHistory.find(w => w.month === month && w.year === year);
-        return monthWage ? monthWage.wage : (employee.dailyWage || 0);
+        const targetKey = getWageHistoryMonthKey(year, month);
+        const wageHistory = employee?.wageHistory || [];
+        
+        const exact = wageHistory.find(w => w.month === month && w.year === year);
+        if (exact && exact.wage != null && !isNaN(exact.wage)) return Number(exact.wage);
+        
+        // أقرب أجر مسجّل في شهر سابق أو مطابق (مهم للموظف المحوّل من يومي إلى شهري)
+        let bestKey = -1;
+        let bestWage = null;
+        wageHistory.forEach(w => {
+            if (w.wage == null || isNaN(w.wage)) return;
+            const key = getWageHistoryMonthKey(w.year, w.month);
+            if (key <= targetKey && key > bestKey) {
+                bestKey = key;
+                bestWage = Number(w.wage);
+            }
+        });
+        if (bestWage != null) return bestWage;
+        
+        if (employee?.dailyWage != null && employee.dailyWage !== '' && !isNaN(employee.dailyWage)) {
+            return Number(employee.dailyWage);
+        }
+        return 0;
+    }
+    
+    function getRepresentativeDailyWageForRecords(employee, dailyRecords) {
+        const wages = new Set();
+        (dailyRecords || []).forEach(r => {
+            const w = getEmployeeDailyWageForDate(employee, r.date, r);
+            if (w > 0) wages.add(w);
+        });
+        if (wages.size === 0) return 0;
+        if (wages.size === 1) return [...wages][0];
+        return Math.max(...wages);
+    }
+    
+    function aggregateGeneralDailyWagesByProject(employee, dailyRecords) {
+        const byProject = {};
+        (dailyRecords || []).forEach(rec => {
+            const pid = rec.projectId;
+            if (!pid) return;
+            const dayValue = getAttendanceNumericDayValue(rec);
+            const dayWage = getEmployeeDailyWageForDate(employee, rec.date, rec);
+            if (!byProject[pid]) {
+                byProject[pid] = { allDays: 0, approvedDays: 0, approvedWageRaw: 0, potentialWageRaw: 0 };
+            }
+            const bucket = byProject[pid];
+            bucket.allDays += dayValue;
+            bucket.potentialWageRaw += dayValue * dayWage;
+            if (rec.approved === true) {
+                bucket.approvedDays += dayValue;
+                bucket.approvedWageRaw += dayValue * dayWage;
+            }
+        });
+        return byProject;
     }
     
     function calculateDailyWageTotalsForAttendance(employee, attendanceRecords) {
@@ -7588,12 +7791,12 @@
         let totalSalary = 0;
         
         attendanceRecords.forEach(att => {
-            if (getEmployeeTypeAtDate(employee, att.date) !== 'daily') return;
+            if (getEffectiveEmployeeTypeForAttendance(employee, att) !== 'daily') return;
             const dayValue = getAttendanceNumericDayValue(att);
             totalNumericDays += dayValue;
             if (att.approved === true) {
                 totalApprovedNumericDays += dayValue;
-                totalSalary += getEmployeeDailyWageForDate(employee, att.date) * dayValue;
+                totalSalary += getEmployeeDailyWageForDate(employee, att.date, att) * dayValue;
             }
         });
         
@@ -8251,13 +8454,14 @@
                                 ${attendance.map(att => {
                                     const statusInfo = attendanceStatuses.employee.find(s => s.key === att.status);
                                     const numericValue = getAttendanceNumericDayValue(att);
-                                    const attType = getEmployeeTypeAtDate(employee, att.date);
+                                    const attType = getEffectiveEmployeeTypeForAttendance(employee, att);
+                                    const hasTypeOverride = att.employeeTypeAtRecord === 'daily' || att.employeeTypeAtRecord === 'monthly';
                                     
                                     const projectCell = showProjectColumn
                                         ? `<td class="px-4 py-2 text-gray-700">${projectById(att.projectId)?.name || att.projectId || '-'}</td>`
                                         : '';
                                     const typeCell = showTypeColumn
-                                        ? `<td class="px-4 py-2"><span class="px-2 py-0.5 text-xs rounded-full ${attType === 'daily' ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'}">${t(attType)}</span></td>`
+                                        ? `<td class="px-4 py-2"><span class="px-2 py-0.5 text-xs rounded-full ${attType === 'daily' ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'}">${t(attType)}</span>${hasTypeOverride ? `<span class="block text-xs text-amber-600">${t('typeOverrideBadge')}</span>` : ''}</td>`
                                         : '';
                                     return `
                                         <tr class="hover:bg-gray-50">
@@ -8346,7 +8550,7 @@
             allEmployees = allEmployees.filter(e => {
                 if (!allAttendance[e.id]?.length) return false;
                 if (!employeeHadTypeInRange(e, fromNorm, toNorm, 'daily')) return false;
-                return allAttendance[e.id].some(att => getEmployeeTypeAtDate(e, att.date) === 'daily');
+                return allAttendance[e.id].some(att => getEffectiveEmployeeTypeForAttendance(e, att) === 'daily');
             });
             
             let rows = allEmployees.map(emp => {
@@ -8363,10 +8567,10 @@
                     projectName: project?.name || '-',
                     totalNumericDays: wageTotals.totalNumericDays,
                     approvedDays: wageTotals.totalApprovedNumericDays,
-                    dailyWage: empAtt.length > 0 ? getEmployeeDailyWageForDate(emp, empAtt[0].date) : (emp.dailyWage || 0),
+                    dailyWage: empAtt.length > 0 ? getRepresentativeDailyWageForRecords(emp, empAtt) : (emp.dailyWage || 0),
                     approvedWage: wageTotals.totalSalary,
                     potentialWage: roundToNearest250(empAtt.reduce((sum, att) => {
-                        return sum + getEmployeeDailyWageForDate(emp, att.date) * getAttendanceNumericDayValue(att);
+                        return sum + getEmployeeDailyWageForDate(emp, att.date, att) * getAttendanceNumericDayValue(att);
                     }, 0)),
                     typePeriodNote,
                     hasMixedType: hasMixedTypeInRange(emp, fromNorm, toNorm)
@@ -8656,6 +8860,7 @@
         const fromDate = document.getElementById('report-general-wages-from')?.value;
         const toDate = document.getElementById('report-general-wages-to')?.value;
         const hideZeroWage = document.getElementById('report-general-wages-hide-zero-wage')?.checked === true;
+        const showProjectDetails = document.getElementById('report-general-wages-show-projects')?.checked !== false;
         const resultsContainer = document.getElementById('report-results');
         if (!resultsContainer) return;
 
@@ -8670,25 +8875,23 @@
                 : null;
             const projects = (window.projectsListData || []).filter(p => p.status !== 'hidden' && (!allowedProjectIds || allowedProjectIds.includes(p.id)));
 
-            // جلب الموظفين العاميين الذين كانوا يوميين في أي جزء من الفترة
+            // جلب جميع الموظفين العاميين (النوع يُحدَّد لكل يوم حسب سجل التحويل)
             const generalEmployeesSnap = await db.collection('employees')
                 .where('assignmentMode', '==', 'general')
                 .get();
-            const employees = [];
+            const employeeMap = new Map();
             generalEmployeesSnap.forEach(doc => {
-                const data = doc.data();
-                if (data.status === 'hidden') return;
-                if (!employeeHadTypeInRange(data, fromNorm, toNorm, 'daily')) return;
+                const emp = { id: doc.id, ...doc.data() };
+                if (emp.status === 'hidden') return;
                 if (allowedProjectIds && allowedProjectIds.length > 0) {
-                    const ids = data.assignedProjectIds || [];
+                    const ids = emp.assignedProjectIds || [];
                     if (!ids.some(pid => allowedProjectIds.includes(pid))) return;
                 }
-                employees.push({ id: doc.id, ...data });
+                employeeMap.set(emp.id, emp);
             });
 
-            // attendanceByEmployee[empId][projectId] = { allDays, approvedDays }
-            const attendanceByEmployee = {};
-            const generalAttBest = {};
+            // جمع حضور الفترة لجميع المشاريع
+            const allAttendance = {};
             for (const p of projects) {
                 const attSnap = await db.collection('attendance').where('projectId', '==', p.id).get();
                 attSnap.forEach(doc => {
@@ -8696,27 +8899,30 @@
                     const dateStr = toYyyyMmDd(data.date);
                     if (!dateStr || dateStr < fromNorm || dateStr > toNorm) return;
                     const empId = data.employeeId;
-                    if (!empId) return;
-                    const emp = employees.find(e => e.id === empId);
-                    if (!emp) return;
-                    if (getEmployeeTypeAtDate(emp, dateStr) !== 'daily') return;
-
-                    const procKey = `${empId}_${p.id}_${dateStr}`;
-                    const rec = { id: doc.id, ...data, date: dateStr };
-                    const existing = generalAttBest[procKey];
-                    if (existing && getAttendanceRecordSortScore(rec) <= getAttendanceRecordSortScore(existing)) return;
-                    generalAttBest[procKey] = rec;
+                    if (!empId || !employeeMap.has(empId)) return;
+                    if (!allAttendance[empId]) allAttendance[empId] = [];
+                    allAttendance[empId].push({
+                        id: doc.id,
+                        ...data,
+                        date: dateStr,
+                        projectId: data.projectId || p.id
+                    });
                 });
             }
-            
-            Object.values(generalAttBest).forEach(rec => {
-                const empId = rec.employeeId;
-                const pid = rec.projectId;
-                const dayValue = getAttendanceNumericDayValue(rec);
-                if (!attendanceByEmployee[empId]) attendanceByEmployee[empId] = {};
-                if (!attendanceByEmployee[empId][pid]) attendanceByEmployee[empId][pid] = { allDays: 0, approvedDays: 0 };
-                attendanceByEmployee[empId][pid].allDays += dayValue;
-                if (rec.approved === true) attendanceByEmployee[empId][pid].approvedDays += dayValue;
+
+            // موظفون عاميون: كانوا يوميين في جزء من الفترة + لديهم حضور يومي فعلي (حسب typeHistory وتجاوز السجل)
+            const employees = Array.from(employeeMap.values()).filter(emp => {
+                const empAtt = allAttendance[emp.id] || [];
+                if (!empAtt.length) return false;
+                if (!employeeHadTypeInRange(emp, fromNorm, toNorm, 'daily')) return false;
+                return empAtt.some(att => getEffectiveEmployeeTypeForAttendance(emp, att) === 'daily');
+            });
+
+            // تجميع حسب المشروع — typeHistory + أجر كل يوم من سجل الأجور
+            const attendanceByEmployee = {};
+            employees.forEach(emp => {
+                const { records: dailyRecords } = filterAttendanceForReport(allAttendance[emp.id] || [], emp, 'daily');
+                attendanceByEmployee[emp.id] = aggregateGeneralDailyWagesByProject(emp, dailyRecords);
             });
 
             const projectIdsInReportSet = new Set();
@@ -8739,26 +8945,23 @@
 
                     const byProject = {};
                     projectIdsInReport.forEach(pid => {
-                        const v = perProject[pid] || { allDays: 0, approvedDays: 0 };
-                        const approvedWage = roundToNearest250(
-                            (v.approvedDays || 0) * getEmployeeDailyWageForDate(emp, fromNorm)
-                        );
-                        const potentialWage = roundToNearest250(
-                            (v.allDays || 0) * getEmployeeDailyWageForDate(emp, fromNorm)
-                        );
+                        const v = perProject[pid] || { allDays: 0, approvedDays: 0, approvedWageRaw: 0, potentialWageRaw: 0 };
                         byProject[pid] = {
                             approvedDays: v.approvedDays || 0,
                             allDays: v.allDays || 0,
-                            approvedWage,
-                            potentialWage
+                            approvedWage: roundToNearest250(v.approvedWageRaw || 0),
+                            potentialWage: roundToNearest250(v.potentialWageRaw || 0)
                         };
                     });
 
+                    const dailyRecords = filterAttendanceForReport(allAttendance[emp.id] || [], emp, 'daily').records;
                     const totalApprovedDays = Object.values(byProject).reduce((s, r) => s + (r.approvedDays || 0), 0);
                     const totalAllDays = Object.values(byProject).reduce((s, r) => s + (r.allDays || 0), 0);
-                    const totalApprovedWage = Object.values(byProject).reduce((s, r) => s + (r.approvedWage || 0), 0);
-                    const totalPotentialWage = Object.values(byProject).reduce((s, r) => s + (r.potentialWage || 0), 0);
-                    const dailyWage = getEmployeeDailyWageForDate(emp, fromNorm);
+                    const totalApprovedWageRaw = Object.values(perProject).reduce((s, v) => s + (v.approvedWageRaw || 0), 0);
+                    const totalPotentialWageRaw = Object.values(perProject).reduce((s, v) => s + (v.potentialWageRaw || 0), 0);
+                    const totalApprovedWage = roundToNearest250(totalApprovedWageRaw);
+                    const totalPotentialWage = roundToNearest250(totalPotentialWageRaw);
+                    const dailyWage = getRepresentativeDailyWageForRecords(emp, dailyRecords);
 
                     return {
                         ...emp,
@@ -8783,16 +8986,26 @@
             const mixedTypeRows = rows.filter(r => r.hasMixedType);
 
             const projectHeaderLabels = projectIdsInReport.map(pid => projects.find(p => p.id === pid)?.name || '-');
+            const empFixedCols = 4;
+            const empProjectCols = showProjectDetails ? projectIdsInReport.length * 4 : 0;
+            const empDayLabel = currentLanguage === 'ar' ? 'أيام معتمدة' : 'Appr days';
+            const empApprWageLabel = currentLanguage === 'ar' ? 'أجر معتمد' : 'Appr wage';
+            const empAllDaysLabel = currentLanguage === 'ar' ? 'أيام الكل' : 'All days';
+            const empAllWageLabel = currentLanguage === 'ar' ? 'أجر الكل' : 'All wage';
+            const empTotalLabel = currentLanguage === 'ar' ? 'الإجمالي' : 'Total';
             resultsContainer.innerHTML = `
                 <div class="card p-6">
                     <div class="flex items-center justify-between mb-6 flex-wrap gap-4">
                         <div>
                             <h3 class="font-bold text-xl">${currentLanguage === 'ar' ? 'تقرير أجور العاميين (موظفين)' : 'General wages (daily employees)'}</h3>
-                            <p class="text-gray-500">${fromDate} - ${toDate}</p>
+                            <p class="text-gray-500">${fromDate} - ${toDate}${showProjectDetails ? '' : ` | ${t('totalsOnly')}`}</p>
                         </div>
                         <button onclick="printReportInNewTab()" class="no-print px-4 py-2 border rounded-lg hover:bg-gray-100">🖨️ ${t('print')}</button>
                     </div>
                     <p class="text-sm text-gray-600 mb-4">${t('dailyWageDaysOnly')}</p>
+                    <p class="text-sm text-gray-600 mb-4">${currentLanguage === 'ar'
+                        ? 'يُحسب حضور كل يوم حسب نوع الموظف في ذلك التاريخ (سجل تحويل النوع). الأجر اليومي يُؤخذ من سجل الأجور لشهر ذلك اليوم، أو آخر أجر مسجّل قبله للموظف المحوّل.'
+                        : 'Each day uses employee type on that date (type change history). Daily wage comes from wage history for that month, or the latest prior recorded wage for converted employees.'}</p>
                     ${mixedTypeRows.length > 0 ? `
                     <div class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">
                         <strong>${t('mixedTypeEmployeesNotice')}</strong>
@@ -8805,6 +9018,7 @@
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm">
                             <thead class="bg-gray-50">
+                                ${showProjectDetails ? `
                                 <tr>
                                     <th class="px-2 py-2 text-right" rowspan="2">${t('employeeCode')}</th>
                                     <th class="px-2 py-2 text-right" rowspan="2">${t('employeeName')}</th>
@@ -8813,20 +9027,32 @@
                                     ${projectHeaderLabels.map(name => `
                                         <th class="px-2 py-2 text-center border-l" colspan="4">${name}</th>
                                     `).join('')}
-                                    <th class="px-2 py-2 text-center border-l" colspan="4">${currentLanguage === 'ar' ? 'الإجمالي' : 'Total'}</th>
+                                    <th class="px-2 py-2 text-center border-l" colspan="4">${empTotalLabel}</th>
                                 </tr>
                                 <tr>
                                     ${projectIdsInReport.map(() => `
-                                        <th class="px-2 py-2 text-center border-l">${currentLanguage === 'ar' ? 'أيام معتمدة' : 'Appr days'}</th>
-                                        <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أجر معتمد' : 'Appr wage'}</th>
-                                        <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أيام الكل' : 'All days'}</th>
-                                        <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أجر الكل' : 'All wage'}</th>
+                                        <th class="px-2 py-2 text-center border-l">${empDayLabel}</th>
+                                        <th class="px-2 py-2 text-center">${empApprWageLabel}</th>
+                                        <th class="px-2 py-2 text-center">${empAllDaysLabel}</th>
+                                        <th class="px-2 py-2 text-center">${empAllWageLabel}</th>
                                     `).join('')}
-                                    <th class="px-2 py-2 text-center border-l">${currentLanguage === 'ar' ? 'أيام معتمدة' : 'Appr days'}</th>
-                                    <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أجر معتمد' : 'Appr wage'}</th>
-                                    <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أيام الكل' : 'All days'}</th>
-                                    <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أجر الكل' : 'All wage'}</th>
+                                    <th class="px-2 py-2 text-center border-l">${empDayLabel}</th>
+                                    <th class="px-2 py-2 text-center">${empApprWageLabel}</th>
+                                    <th class="px-2 py-2 text-center">${empAllDaysLabel}</th>
+                                    <th class="px-2 py-2 text-center">${empAllWageLabel}</th>
                                 </tr>
+                                ` : `
+                                <tr>
+                                    <th class="px-2 py-2 text-right">${t('employeeCode')}</th>
+                                    <th class="px-2 py-2 text-right">${t('employeeName')}</th>
+                                    <th class="px-2 py-2 text-center">${t('status')}</th>
+                                    <th class="px-2 py-2 text-center">${t('currentDailyWage')} (IQD)</th>
+                                    <th class="px-2 py-2 text-center border-l">${empDayLabel}</th>
+                                    <th class="px-2 py-2 text-center">${empApprWageLabel}</th>
+                                    <th class="px-2 py-2 text-center">${empAllDaysLabel}</th>
+                                    <th class="px-2 py-2 text-center">${empAllWageLabel}</th>
+                                </tr>
+                                `}
                             </thead>
                             <tbody class="divide-y">
                                 ${rows.map(r => `
@@ -8838,7 +9064,7 @@
                                         </td>
                                         <td class="px-2 py-2 text-center"><span class="px-2 py-0.5 text-xs rounded-full ${r.status === 'active' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600'}">${t(r.status || 'active')}</span></td>
                                         <td class="px-2 py-2 text-center">${formatWage(r.dailyWage)}</td>
-                                        ${projectIdsInReport.map(pid => {
+                                        ${showProjectDetails ? projectIdsInReport.map(pid => {
                                             const pr = r.byProject?.[pid] || { approvedDays: 0, approvedWage: 0, allDays: 0, potentialWage: 0 };
                                             return `
                                                 <td class="px-2 py-2 text-center border-l">${(pr.approvedDays || 0).toFixed(2)}</td>
@@ -8846,7 +9072,7 @@
                                                 <td class="px-2 py-2 text-center">${(pr.allDays || 0).toFixed(2)}</td>
                                                 <td class="px-2 py-2 text-center text-blue-700">${formatWage(pr.potentialWage || 0)}</td>
                                             `;
-                                        }).join('')}
+                                        }).join('') : ''}
                                         <td class="px-2 py-2 text-center border-l font-semibold">${(r.totalApprovedDays || 0).toFixed(2)}</td>
                                         <td class="px-2 py-2 text-center font-bold text-green-700">${formatWage(r.totalApprovedWage)}</td>
                                         <td class="px-2 py-2 text-center font-semibold">${(r.totalAllDays || 0).toFixed(2)}</td>
@@ -8854,11 +9080,11 @@
                                     </tr>
                                 `).join('')}
                                 <tr class="bg-gray-100 font-bold">
-                                    <td class="px-2 py-2" colspan="${4 + (projectIdsInReport.length * 4) + 2}">${currentLanguage === 'ar' ? 'الإجمالي (معتمد)' : 'Approved total'}</td>
+                                    <td class="px-2 py-2" colspan="${empFixedCols + empProjectCols + 2}">${currentLanguage === 'ar' ? 'الإجمالي (معتمد)' : 'Approved total'}</td>
                                     <td class="px-2 py-2 text-center text-green-700" colspan="2">${formatWage(grandApprovedTotal)}</td>
                                 </tr>
                                 <tr class="bg-gray-50 font-bold">
-                                    <td class="px-2 py-2" colspan="${4 + (projectIdsInReport.length * 4) + 3}">${currentLanguage === 'ar' ? 'الإجمالي (محتمل)' : 'Potential total'}</td>
+                                    <td class="px-2 py-2" colspan="${empFixedCols + empProjectCols + 3}">${currentLanguage === 'ar' ? 'الإجمالي (محتمل)' : 'Potential total'}</td>
                                     <td class="px-2 py-2 text-center text-blue-700">${formatWage(grandPotentialTotal)}</td>
                                 </tr>
                             </tbody>
@@ -8878,6 +9104,7 @@
         const fromDate = document.getElementById('report-general-vehicle-wages-from')?.value;
         const toDate = document.getElementById('report-general-vehicle-wages-to')?.value;
         const hideZeroWage = document.getElementById('report-general-vehicle-wages-hide-zero-wage')?.checked === true;
+        const showProjectDetails = document.getElementById('report-general-vehicle-wages-show-projects')?.checked !== false;
         const resultsContainer = document.getElementById('report-results');
         if (!resultsContainer) return;
 
@@ -9007,12 +9234,19 @@
             const grandPotentialTotal = rows.reduce((sum, r) => sum + r.totalPotentialWage, 0);
 
             const projectHeaderLabels = projectIdsInReport.map(pid => projects.find(p => p.id === pid)?.name || '-');
+            const vehFixedCols = 5;
+            const vehProjectCols = showProjectDetails ? projectIdsInReport.length * 4 : 0;
+            const vehDayLabel = currentLanguage === 'ar' ? 'أيام معتمدة' : 'Appr days';
+            const vehApprWageLabel = currentLanguage === 'ar' ? 'أجر معتمد' : 'Appr wage';
+            const vehAllDaysLabel = currentLanguage === 'ar' ? 'أيام الكل' : 'All days';
+            const vehAllWageLabel = currentLanguage === 'ar' ? 'أجر الكل' : 'All wage';
+            const vehTotalLabel = currentLanguage === 'ar' ? 'الإجمالي' : 'Total';
             resultsContainer.innerHTML = `
                 <div class="card p-6">
                     <div class="flex items-center justify-between mb-6 flex-wrap gap-4">
                         <div>
                             <h3 class="font-bold text-xl">${currentLanguage === 'ar' ? 'تقرير أجور العاميين (آليات)' : 'General wages (vehicles)'}</h3>
-                            <p class="text-gray-500">${fromDate} - ${toDate}</p>
+                            <p class="text-gray-500">${fromDate} - ${toDate}${showProjectDetails ? '' : ` | ${t('totalsOnly')}`}</p>
                         </div>
                         <button onclick="printReportInNewTab()" class="no-print px-4 py-2 border rounded-lg hover:bg-gray-100">🖨️ ${t('print')}</button>
                     </div>
@@ -9020,6 +9254,7 @@
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm">
                             <thead class="bg-gray-50">
+                                ${showProjectDetails ? `
                                 <tr>
                                     <th class="px-2 py-2 text-right" rowspan="2">${t('vehicleCode')}</th>
                                     <th class="px-2 py-2 text-right" rowspan="2">${t('vehicleName')}</th>
@@ -9029,20 +9264,33 @@
                                     ${projectHeaderLabels.map(name => `
                                         <th class="px-2 py-2 text-center border-l" colspan="4">${name}</th>
                                     `).join('')}
-                                    <th class="px-2 py-2 text-center border-l" colspan="4">${currentLanguage === 'ar' ? 'الإجمالي' : 'Total'}</th>
+                                    <th class="px-2 py-2 text-center border-l" colspan="4">${vehTotalLabel}</th>
                                 </tr>
                                 <tr>
                                     ${projectIdsInReport.map(() => `
-                                        <th class="px-2 py-2 text-center border-l">${currentLanguage === 'ar' ? 'أيام معتمدة' : 'Appr days'}</th>
-                                        <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أجر معتمد' : 'Appr wage'}</th>
-                                        <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أيام الكل' : 'All days'}</th>
-                                        <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أجر الكل' : 'All wage'}</th>
+                                        <th class="px-2 py-2 text-center border-l">${vehDayLabel}</th>
+                                        <th class="px-2 py-2 text-center">${vehApprWageLabel}</th>
+                                        <th class="px-2 py-2 text-center">${vehAllDaysLabel}</th>
+                                        <th class="px-2 py-2 text-center">${vehAllWageLabel}</th>
                                     `).join('')}
-                                    <th class="px-2 py-2 text-center border-l">${currentLanguage === 'ar' ? 'أيام معتمدة' : 'Appr days'}</th>
-                                    <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أجر معتمد' : 'Appr wage'}</th>
-                                    <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أيام الكل' : 'All days'}</th>
-                                    <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أجر الكل' : 'All wage'}</th>
+                                    <th class="px-2 py-2 text-center border-l">${vehDayLabel}</th>
+                                    <th class="px-2 py-2 text-center">${vehApprWageLabel}</th>
+                                    <th class="px-2 py-2 text-center">${vehAllDaysLabel}</th>
+                                    <th class="px-2 py-2 text-center">${vehAllWageLabel}</th>
                                 </tr>
+                                ` : `
+                                <tr>
+                                    <th class="px-2 py-2 text-right">${t('vehicleCode')}</th>
+                                    <th class="px-2 py-2 text-right">${t('vehicleName')}</th>
+                                    <th class="px-2 py-2 text-center">${t('status')}</th>
+                                    <th class="px-2 py-2 text-right">${t('vehicleCalculationType')}</th>
+                                    <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'الأجر' : 'Wage'} (IQD)</th>
+                                    <th class="px-2 py-2 text-center border-l">${vehDayLabel}</th>
+                                    <th class="px-2 py-2 text-center">${vehApprWageLabel}</th>
+                                    <th class="px-2 py-2 text-center">${vehAllDaysLabel}</th>
+                                    <th class="px-2 py-2 text-center">${vehAllWageLabel}</th>
+                                </tr>
+                                `}
                             </thead>
                             <tbody class="divide-y">
                                 ${rows.map(r => `
@@ -9052,7 +9300,7 @@
                                         <td class="px-2 py-2 text-center"><span class="px-2 py-0.5 text-xs rounded-full ${r.status === 'active' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600'}">${t(r.status || 'active')}</span></td>
                                         <td class="px-2 py-2">${t(r.calcType)}</td>
                                         <td class="px-2 py-2 text-center">${formatWage(r.calcType === 'daily' ? r.dailyWage : r.monthlyWage)}</td>
-                                        ${projectIdsInReport.map(pid => {
+                                        ${showProjectDetails ? projectIdsInReport.map(pid => {
                                             const pr = r.byProject?.[pid] || { approvedDays: 0, approvedWage: 0, allDays: 0, potentialWage: 0 };
                                             return `
                                                 <td class="px-2 py-2 text-center border-l">${(pr.approvedDays || 0).toFixed(2)}</td>
@@ -9060,7 +9308,7 @@
                                                 <td class="px-2 py-2 text-center">${(pr.allDays || 0).toFixed(2)}</td>
                                                 <td class="px-2 py-2 text-center text-blue-700">${formatWage(pr.potentialWage || 0)}</td>
                                             `;
-                                        }).join('')}
+                                        }).join('') : ''}
                                         <td class="px-2 py-2 text-center border-l font-semibold">${(r.totalApprovedDays || 0).toFixed(2)}</td>
                                         <td class="px-2 py-2 text-center font-bold text-green-700">${formatWage(r.totalApprovedWage)}</td>
                                         <td class="px-2 py-2 text-center font-semibold">${(r.totalAllDays || 0).toFixed(2)}</td>
@@ -9068,11 +9316,11 @@
                                     </tr>
                                 `).join('')}
                                 <tr class="bg-gray-100 font-bold">
-                                    <td class="px-2 py-2" colspan="${5 + (projectIdsInReport.length * 4) + 2}">${currentLanguage === 'ar' ? 'الإجمالي (معتمد)' : 'Approved total'}</td>
+                                    <td class="px-2 py-2" colspan="${vehFixedCols + vehProjectCols + 2}">${currentLanguage === 'ar' ? 'الإجمالي (معتمد)' : 'Approved total'}</td>
                                     <td class="px-2 py-2 text-center text-green-700" colspan="2">${formatWage(grandApprovedTotal)}</td>
                                 </tr>
                                 <tr class="bg-gray-50 font-bold">
-                                    <td class="px-2 py-2" colspan="${5 + (projectIdsInReport.length * 4) + 3}">${currentLanguage === 'ar' ? 'الإجمالي (محتمل)' : 'Potential total'}</td>
+                                    <td class="px-2 py-2" colspan="${vehFixedCols + vehProjectCols + 3}">${currentLanguage === 'ar' ? 'الإجمالي (محتمل)' : 'Potential total'}</td>
                                     <td class="px-2 py-2 text-center text-blue-700">${formatWage(grandPotentialTotal)}</td>
                                 </tr>
                             </tbody>
