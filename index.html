@@ -1716,7 +1716,8 @@
     // دوال المصادقة
     // ═══════════════════════════════════════════════════════════════════════
 
-    const APP_UPDATE_NOTICE_VERSION = '2026-07-19-attendance-reports-v1';
+    const APP_VERSION = '2026.07.19.2';
+    const APP_UPDATE_NOTICE_VERSION = '2026-07-19-project-summary-v2';
 
     function showUpdateNoticeOnce() {
         if (!currentUser) return;
@@ -1731,19 +1732,25 @@
             const content = `
                 <div class="space-y-4">
                     <div class="p-4 rounded-xl bg-blue-50 border border-blue-200">
-                        <p class="font-bold text-blue-800">
-                            ${isArabic ? 'تم تحديث نظام الحضور والتقارير' : 'Attendance and reports were updated'}
-                        </p>
+                        <div class="flex items-center justify-between gap-3">
+                            <p class="font-bold text-blue-800">
+                                ${isArabic ? 'تم تحديث نظام الحضور والتقارير' : 'Attendance and reports were updated'}
+                            </p>
+                            <span class="shrink-0 px-2 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-mono">
+                                v${APP_VERSION}
+                            </span>
+                        </div>
                         <p class="text-sm text-blue-700 mt-1">
                             ${isArabic ? 'تتوفر الآن التحسينات التالية:' : 'The following improvements are now available:'}
                         </p>
                     </div>
                     <ul class="space-y-3 text-sm text-gray-700">
-                        <li class="flex gap-2"><span>🔎</span><span>${isArabic ? 'بحث وترتيب أبجدي A–Z أو Z–A في قسم الحضور.' : 'Search and A–Z/Z–A sorting in Attendance.'}</span></li>
-                        <li class="flex gap-2"><span>📋</span><span>${isArabic ? 'مراجعة وتعديل سجلات دوام الموظف ضمن فترة محددة.' : 'Review and edit employee attendance records for a selected period.'}</span></li>
-                        <li class="flex gap-2"><span>🔄</span><span>${isArabic ? 'تحسين احتساب نوع الموظف وتاريخ التحويل في التقارير.' : 'Improved employee type-change handling in reports.'}</span></li>
-                        <li class="flex gap-2"><span>💰</span><span>${isArabic ? 'تحسين تقارير أجور العاميين واحتساب الأجر اليومي الصحيح.' : 'Improved general wage reports and daily wage calculations.'}</span></li>
-                        <li class="flex gap-2"><span>🏗️</span><span>${isArabic ? 'خيار عرض تفاصيل المشاريع أو الإجماليات فقط في تقارير العاميين.' : 'Option to show project details or totals only in general reports.'}</span></li>
+                        <li class="flex gap-2"><span>📊</span><span>${isArabic ? 'إضافة تقرير ملخص المشاريع مع إمكانية تحديد الأنواع: شهري، يومي، وآليات.' : 'Added Projects Summary Report with monthly, daily, and vehicle type filters.'}</span></li>
+                        <li class="flex gap-2"><span>📅</span><span>${isArabic ? 'إضافة تفصيل يومي للحضور والعمل داخل ملخص كل مشروع.' : 'Added daily attendance and work breakdown for every project.'}</span></li>
+                        <li class="flex gap-2"><span>👷</span><span>${isArabic ? 'تصحيح أعداد الموظفين لتُحتسب حسب الدوام الفعلي ونوع الموظف في تاريخ الدوام.' : 'Corrected employee counts based on actual attendance and type at the attendance date.'}</span></li>
+                        <li class="flex gap-2"><span>✅</span><span>${isArabic ? 'الموظف يُحتسب في المشروع الذي داوم فيه فقط، ومرة واحدة في الإجمالي مهما تعددت مشاريعه.' : 'Employees count only in projects where they attended and once in the grand total.'}</span></li>
+                        <li class="flex gap-2"><span>🔄</span><span>${isArabic ? 'تحسين معالجة تحويل نوع الموظف ومنع تكرار الدوام في التقارير.' : 'Improved employee type conversions and prevented duplicate attendance in reports.'}</span></li>
+                        <li class="flex gap-2"><span>📋</span><span>${isArabic ? 'مراجعة وتعديل سجلات دوام الموظف ضمن فترة محددة، مع البحث والترتيب الأبجدي.' : 'Review and edit attendance for a selected period, with search and alphabetical sorting.'}</span></li>
                     </ul>
                     <p class="text-xs text-gray-500">
                         ${isArabic ? 'سيظهر هذا الإشعار مرة واحدة فقط لهذا المستخدم.' : 'This notice is shown only once for this user.'}
@@ -6949,6 +6956,57 @@
             
             container.innerHTML = `
                 <div id="report-forms" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- ملخص جميع المشاريع -->
+                    <div class="card p-6 md:col-span-2 border-2 border-primary-100">
+                        <h3 class="font-bold text-lg mb-2 flex items-center gap-2">
+                            📊 ${currentLanguage === 'ar' ? 'تقرير ملخص المشاريع' : 'Projects Summary Report'}
+                        </h3>
+                        <p class="text-sm text-gray-600 mb-4">
+                            ${currentLanguage === 'ar'
+                                ? 'مقارنة موحدة للحضور والاعتماد بين المشاريع، مفصّلة حسب النوع (شهري / يومي / آليات).'
+                                : 'A unified comparison of attendance and approvals across projects, broken down by type (monthly / daily / vehicles).'}
+                        </p>
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">${t('from')}</label>
+                                <input type="date" id="report-projects-summary-from" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500" value="${reportProjectDefaultFrom}">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">${t('to')}</label>
+                                <input type="date" id="report-projects-summary-to" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500" value="${reportProjectDefaultTo}">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">${currentLanguage === 'ar' ? 'ترتيب المشاريع' : 'Sort projects'}</label>
+                                <select id="report-projects-summary-sort" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500">
+                                    <option value="name">${currentLanguage === 'ar' ? 'حسب الاسم' : 'By name'}</option>
+                                    <option value="attendance">${currentLanguage === 'ar' ? 'حسب نسبة الحضور' : 'By attendance rate'}</option>
+                                </select>
+                            </div>
+                            <label class="flex items-center gap-2 cursor-pointer pb-2">
+                                <input type="checkbox" id="report-projects-summary-include-inactive" class="rounded text-primary-600">
+                                <span class="text-sm text-gray-700">${t('includeInactiveInReport')}</span>
+                            </label>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-4 mt-3">
+                            <span class="text-sm font-medium text-gray-700">${t('reportEmployeeType')}:</span>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" id="report-projects-summary-type-monthly" class="rounded text-primary-600" checked>
+                                <span class="text-sm text-gray-700">👥 ${t('monthly')}</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" id="report-projects-summary-type-daily" class="rounded text-primary-600" checked>
+                                <span class="text-sm text-gray-700">👷 ${t('daily')}</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" id="report-projects-summary-type-vehicles" class="rounded text-primary-600" checked>
+                                <span class="text-sm text-gray-700">🚗 ${t('vehicles')}</span>
+                            </label>
+                            <button onclick="generateProjectsSummaryReport()" class="mr-auto px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">
+                                ${t('view')} ${currentLanguage === 'ar' ? 'الملخص' : 'Summary'}
+                            </button>
+                        </div>
+                    </div>
+
                     <!-- تقرير المشروع -->
                     <div class="card p-6">
                         <h3 class="font-bold text-lg mb-4 flex items-center gap-2">
@@ -7947,6 +8005,404 @@
             totalApprovedNumericDays,
             totalSalary: roundToNearest250(totalSalary)
         };
+    }
+
+    function getVehicleWorkedDayValue(record) {
+        if (record.status === 'worked') return 1;
+        if (record.status === 'workedPartial') return 0.5;
+        if (record.status === 'shift') return getShiftEquivalentDays(record);
+        return 0;
+    }
+
+    function entityBelongsToProject(entity, projectId) {
+        if (entity?.assignmentMode === 'general') {
+            return Array.isArray(entity.assignedProjectIds) && entity.assignedProjectIds.includes(projectId);
+        }
+        return entity?.projectId === projectId;
+    }
+
+    function dedupeSummaryRecords(records, idField) {
+        const bestByKey = new Map();
+        records.forEach(record => {
+            const date = toYyyyMmDd(record.date) || record.date;
+            const key = `${record[idField] || ''}_${date}`;
+            const current = bestByKey.get(key);
+            if (!current || getAttendanceRecordSortScore(record) > getAttendanceRecordSortScore(current)) {
+                bestByKey.set(key, { ...record, date });
+            }
+        });
+        return Array.from(bestByKey.values());
+    }
+
+    function openProjectReportFromSummary(projectId, fromDate, toDate) {
+        const projectSelect = document.getElementById('report-project');
+        const fromInput = document.getElementById('report-project-from');
+        const toInput = document.getElementById('report-project-to');
+        const typeSelect = document.getElementById('report-project-type');
+        if (!projectSelect || !Array.from(projectSelect.options).some(o => o.value === projectId)) return;
+        projectSelect.value = projectId;
+        if (fromInput) fromInput.value = fromDate;
+        if (toInput) toInput.value = toDate;
+        if (typeSelect) typeSelect.value = 'all';
+        generateProjectReport();
+    }
+
+    function toggleSummaryDailyRows(projectId) {
+        const row = document.getElementById(`summary-daily-${projectId}`);
+        if (row) row.classList.toggle('hidden');
+    }
+    
+    async function generateProjectsSummaryReport() {
+        const fromDate = document.getElementById('report-projects-summary-from')?.value;
+        const toDate = document.getElementById('report-projects-summary-to')?.value;
+        const sortBy = document.getElementById('report-projects-summary-sort')?.value || 'name';
+        const includeInactive = document.getElementById('report-projects-summary-include-inactive')?.checked === true;
+        const showMonthly = document.getElementById('report-projects-summary-type-monthly')?.checked !== false;
+        const showDaily = document.getElementById('report-projects-summary-type-daily')?.checked !== false;
+        const showVehicles = document.getElementById('report-projects-summary-type-vehicles')?.checked !== false;
+        const resultsContainer = document.getElementById('report-results');
+        if (!resultsContainer || !fromDate || !toDate) {
+            showToast(t('required'), 'error');
+            return;
+        }
+        if (!showMonthly && !showDaily && !showVehicles) {
+            showToast(currentLanguage === 'ar' ? 'اختر نوعاً واحداً على الأقل' : 'Select at least one type', 'error');
+            return;
+        }
+
+        const fromNorm = toYyyyMmDd(fromDate) || fromDate;
+        const toNorm = toYyyyMmDd(toDate) || toDate;
+        if (fromNorm > toNorm) {
+            showToast(currentLanguage === 'ar' ? 'تاريخ البداية يجب أن يسبق تاريخ النهاية' : 'Start date must be before end date', 'error');
+            return;
+        }
+
+        resultsContainer.innerHTML = `<div class="text-center py-8"><div class="loader mx-auto"></div></div>`;
+
+        try {
+            const allowedProjectIds = (currentUserData?.role === 'supervisor' || currentUserData?.role === 'approver')
+                && Array.isArray(currentUserData.assignedProjects)
+                && currentUserData.assignedProjects.length > 0
+                ? currentUserData.assignedProjects
+                : null;
+            const projects = (window.projectsListData || [])
+                .filter(p => p.status !== 'hidden' && (!allowedProjectIds || allowedProjectIds.includes(p.id)));
+
+            if (projects.length === 0) {
+                resultsContainer.innerHTML = `<p class="text-gray-500 text-center py-8">${currentLanguage === 'ar' ? 'لا توجد مشاريع متاحة' : 'No projects available'}</p>`;
+                return;
+            }
+
+            const [employeesSnap, vehiclesSnap] = await Promise.all([
+                db.collection('employees').get(),
+                db.collection('vehicles').get()
+            ]);
+            const employees = [];
+            const vehicles = [];
+            employeesSnap.forEach(doc => employees.push({ id: doc.id, ...doc.data() }));
+            vehiclesSnap.forEach(doc => vehicles.push({ id: doc.id, ...doc.data() }));
+            const employeeById = new Map(employees.map(e => [e.id, e]));
+            const vehicleById = new Map(vehicles.map(v => [v.id, v]));
+
+            const fromParts = fromNorm.split('-').map(Number);
+            const toParts = toNorm.split('-').map(Number);
+            const fromD = new Date(fromParts[0], fromParts[1] - 1, fromParts[2]);
+            const toD = new Date(toParts[0], toParts[1] - 1, toParts[2]);
+            const daysInPeriod = Math.max(1, Math.round((toD - fromD) / 86400000) + 1);
+            const entityIsVisible = entity => entity?.status !== 'hidden' && (includeInactive || entity?.status === 'active');
+
+            const daysList = [];
+            for (let d = fromNorm; d <= toNorm && daysList.length <= 400; d = addDaysToYyyyMmDd(d, 1)) {
+                daysList.push(d);
+            }
+
+            const rows = await Promise.all(projects.map(async project => {
+                const [attendanceSnap, vehicleAttendanceSnap] = await Promise.all([
+                    db.collection('attendance').where('projectId', '==', project.id).get(),
+                    showVehicles
+                        ? db.collection('vehicleAttendance').where('projectId', '==', project.id).get()
+                        : Promise.resolve(null)
+                ]);
+
+                const rawEmployeeAttendance = [];
+                attendanceSnap.forEach(doc => {
+                    const data = doc.data();
+                    const date = toYyyyMmDd(data.date);
+                    const employee = employeeById.get(data.employeeId);
+                    if (!date || date < fromNorm || date > toNorm || !employee || !entityIsVisible(employee)) return;
+                    rawEmployeeAttendance.push({ id: doc.id, ...data, date });
+                });
+                const employeeAttendanceAll = dedupeSummaryRecords(rawEmployeeAttendance, 'employeeId');
+                const employeeAttendance = employeeAttendanceAll.filter(record => {
+                    const employee = employeeById.get(record.employeeId);
+                    const type = getEffectiveEmployeeTypeForAttendance(employee, record);
+                    return (type === 'monthly' && showMonthly) || (type === 'daily' && showDaily);
+                });
+
+                // عدّ الموظفين وفق الدوام الفعلي المسجل في هذا المشروع خلال الفترة فقط
+                // (لا يُحتسب الموظف في مشروع مسند إليه ما لم يكن له دوام مسجل فيه)
+                const monthlyEmployeeIds = new Set();
+                const dailyEmployeeIds = new Set();
+                employeeAttendance.forEach(record => {
+                    const employee = employeeById.get(record.employeeId);
+                    const type = getEffectiveEmployeeTypeForAttendance(employee, record);
+                    if (type === 'monthly') monthlyEmployeeIds.add(record.employeeId);
+                    else dailyEmployeeIds.add(record.employeeId);
+                });
+
+                const dailyMap = new Map(daysList.map(d => [d, {
+                    monthlyDays: 0, dailyDays: 0, vehicleDays: 0, absent: 0, approved: 0, unapproved: 0
+                }]));
+
+                let monthlyAttendanceDays = 0;
+                let dailyAttendanceDays = 0;
+                let absentRecords = 0;
+                let approvedRecords = 0;
+                let totalRecords = 0;
+                employeeAttendance.forEach(record => {
+                    const employee = employeeById.get(record.employeeId);
+                    const type = getEffectiveEmployeeTypeForAttendance(employee, record);
+                    const dayValue = getAttendanceNumericDayValue(record);
+                    totalRecords += 1;
+                    if (type === 'monthly') monthlyAttendanceDays += dayValue;
+                    else dailyAttendanceDays += dayValue;
+                    if (record.status === 'absent') absentRecords += 1;
+                    if (record.approved === true) approvedRecords += 1;
+                    const dayEntry = dailyMap.get(record.date);
+                    if (dayEntry) {
+                        if (type === 'monthly') dayEntry.monthlyDays += dayValue;
+                        else dayEntry.dailyDays += dayValue;
+                        if (record.status === 'absent') dayEntry.absent += 1;
+                        if (record.approved === true) dayEntry.approved += 1;
+                        else dayEntry.unapproved += 1;
+                    }
+                });
+
+                let vehicleWorkedDays = 0;
+                const workedVehicleIds = new Set();
+                if (showVehicles && vehicleAttendanceSnap) {
+                    const rawVehicleAttendance = [];
+                    vehicleAttendanceSnap.forEach(doc => {
+                        const data = doc.data();
+                        const date = toYyyyMmDd(data.date);
+                        const vehicle = vehicleById.get(data.vehicleId);
+                        if (!date || date < fromNorm || date > toNorm || !vehicle || !entityIsVisible(vehicle)) return;
+                        rawVehicleAttendance.push({ id: doc.id, ...data, date });
+                    });
+                    const vehicleAttendance = dedupeSummaryRecords(rawVehicleAttendance, 'vehicleId');
+                    vehicleAttendance.forEach(record => {
+                        const dayValue = getVehicleWorkedDayValue(record);
+                        vehicleWorkedDays += dayValue;
+                        workedVehicleIds.add(record.vehicleId);
+                        totalRecords += 1;
+                        if (record.approved === true) approvedRecords += 1;
+                        const dayEntry = dailyMap.get(record.date);
+                        if (dayEntry) {
+                            dayEntry.vehicleDays += dayValue;
+                            if (record.approved === true) dayEntry.approved += 1;
+                            else dayEntry.unapproved += 1;
+                        }
+                    });
+                }
+
+                const unapprovedRecords = totalRecords - approvedRecords;
+                const countedEmployees = (showMonthly ? monthlyEmployeeIds.size : 0) + (showDaily ? dailyEmployeeIds.size : 0);
+                const attendanceDays = monthlyAttendanceDays + dailyAttendanceDays;
+                const attendanceCapacity = countedEmployees * daysInPeriod;
+                const attendanceRate = attendanceCapacity > 0
+                    ? Math.min(100, Math.round((attendanceDays / attendanceCapacity) * 100))
+                    : 0;
+
+                return {
+                    id: project.id,
+                    code: project.code || '',
+                    name: project.name || '-',
+                    monthlyCount: monthlyEmployeeIds.size,
+                    dailyCount: dailyEmployeeIds.size,
+                    monthlyEmployeeIds: Array.from(monthlyEmployeeIds),
+                    dailyEmployeeIds: Array.from(dailyEmployeeIds),
+                    workedVehicleIds: Array.from(workedVehicleIds),
+                    vehiclesCount: workedVehicleIds.size,
+                    monthlyAttendanceDays,
+                    dailyAttendanceDays,
+                    attendanceDays,
+                    vehicleWorkedDays,
+                    absentRecords,
+                    attendanceRate,
+                    approvedRecords,
+                    unapprovedRecords,
+                    dailyBreakdown: daysList.map(d => ({ date: d, ...dailyMap.get(d) }))
+                };
+            }));
+
+            rows.sort((a, b) => {
+                if (sortBy === 'attendance') return b.attendanceRate - a.attendanceRate || a.name.localeCompare(b.name);
+                return a.name.localeCompare(b.name, currentLanguage === 'ar' ? 'ar' : 'en', { sensitivity: 'base' });
+            });
+
+            // الإجماليات تعدّ كل موظف/آلية مرة واحدة على مستوى جميع المشاريع
+            const totalMonthlyIds = new Set();
+            const totalDailyIds = new Set();
+            const totalVehicleIds = new Set();
+            rows.forEach(row => {
+                row.monthlyEmployeeIds.forEach(id => totalMonthlyIds.add(id));
+                row.dailyEmployeeIds.forEach(id => totalDailyIds.add(id));
+                row.workedVehicleIds.forEach(id => totalVehicleIds.add(id));
+            });
+
+            const totals = rows.reduce((acc, row) => {
+                acc.monthlyAttendanceDays += row.monthlyAttendanceDays;
+                acc.dailyAttendanceDays += row.dailyAttendanceDays;
+                acc.attendanceDays += row.attendanceDays;
+                acc.vehicleWorkedDays += row.vehicleWorkedDays;
+                acc.absentRecords += row.absentRecords;
+                acc.approvedRecords += row.approvedRecords;
+                acc.unapprovedRecords += row.unapprovedRecords;
+                return acc;
+            }, {
+                monthlyAttendanceDays: 0, dailyAttendanceDays: 0, attendanceDays: 0,
+                vehicleWorkedDays: 0, absentRecords: 0, approvedRecords: 0, unapprovedRecords: 0
+            });
+            totals.monthlyCount = totalMonthlyIds.size;
+            totals.dailyCount = totalDailyIds.size;
+            totals.vehiclesCount = totalVehicleIds.size;
+            const totalCountedEmployees = (showMonthly ? totals.monthlyCount : 0) + (showDaily ? totals.dailyCount : 0);
+            const totalCapacity = totalCountedEmployees * daysInPeriod;
+            const overallRate = totalCapacity > 0 ? Math.min(100, Math.round((totals.attendanceDays / totalCapacity) * 100)) : 0;
+            const mainColsCount = 1 + (showMonthly ? 2 : 0) + (showDaily ? 2 : 0) + (showVehicles ? 2 : 0) + 6;
+            const formatDayLabel = dateStr => {
+                const parts = dateStr.split('-').map(Number);
+                return new Date(parts[0], parts[1] - 1, parts[2]).toLocaleDateString(
+                    currentLanguage === 'ar' ? 'ar' : 'en', { weekday: 'long' });
+            };
+
+            resultsContainer.innerHTML = `
+                <div class="card p-6">
+                    <div class="flex items-center justify-between mb-6 flex-wrap gap-4">
+                        <div>
+                            <h3 class="font-bold text-xl">${currentLanguage === 'ar' ? 'تقرير ملخص المشاريع' : 'Projects Summary Report'}</h3>
+                            <p class="text-gray-500">${fromNorm} — ${toNorm} | ${rows.length} ${currentLanguage === 'ar' ? 'مشروع' : 'project(s)'}</p>
+                        </div>
+                        <button onclick="printReportInNewTab()" class="no-print px-4 py-2 border rounded-lg hover:bg-gray-100">🖨️ ${t('print')}</button>
+                    </div>
+
+                    <div class="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6 no-print-stats">
+                        <div class="bg-blue-50 p-3 rounded-lg text-center"><p class="text-xl font-bold text-blue-700">${rows.length}</p><p class="text-xs text-gray-600">${t('projects')}</p></div>
+                        ${showMonthly ? `<div class="bg-purple-50 p-3 rounded-lg text-center"><p class="text-xl font-bold text-purple-700">${totals.monthlyCount}</p><p class="text-xs text-gray-600">👥 ${t('monthly')}</p></div>` : ''}
+                        ${showDaily ? `<div class="bg-sky-50 p-3 rounded-lg text-center"><p class="text-xl font-bold text-sky-700">${totals.dailyCount}</p><p class="text-xs text-gray-600">👷 ${t('daily')}</p></div>` : ''}
+                        ${showVehicles ? `<div class="bg-orange-50 p-3 rounded-lg text-center"><p class="text-xl font-bold text-orange-700">${totals.vehiclesCount}</p><p class="text-xs text-gray-600">🚗 ${t('vehicles')}</p></div>` : ''}
+                        <div class="bg-green-50 p-3 rounded-lg text-center"><p class="text-xl font-bold text-green-700">${totals.attendanceDays.toFixed(2)}</p><p class="text-xs text-gray-600">${currentLanguage === 'ar' ? 'أيام حضور محسوبة' : 'Counted attendance days'}</p></div>
+                        <div class="bg-indigo-50 p-3 rounded-lg text-center"><p class="text-xl font-bold text-indigo-700">${overallRate}%</p><p class="text-xs text-gray-600">${t('attendanceRate')}</p></div>
+                        <div class="bg-amber-50 p-3 rounded-lg text-center"><p class="text-xl font-bold text-amber-700">${totals.unapprovedRecords}</p><p class="text-xs text-gray-600">${t('unapprovedRecords')}</p></div>
+                    </div>
+
+                    <p class="text-xs text-gray-500 mb-4">
+                        ${currentLanguage === 'ar'
+                            ? 'الأعداد تعتمد على الدوام الفعلي المسجل: يُحتسب الموظف في المشروع الذي داوم فيه فقط، ومرة واحدة في الإجمالي الكلي مهما تعددت مشاريعه. النوع يُحدد وفق سجل تحويل النوع في تاريخ كل دوام، والموظف المحوَّل خلال الفترة يظهر ضمن النوعين.'
+                            : 'Counts are based on actual recorded attendance: an employee counts only in projects where they attended, and once in the grand total regardless of how many projects. The type follows the type change history at each attendance date; an employee converted mid-period appears under both types.'}
+                    </p>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-xs">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-2 py-2 text-right">${t('projects')}</th>
+                                    ${showMonthly ? `<th class="px-2 py-2 text-center text-purple-700">👥 ${t('monthly')}</th>` : ''}
+                                    ${showDaily ? `<th class="px-2 py-2 text-center text-sky-700">👷 ${t('daily')}</th>` : ''}
+                                    ${showVehicles ? `<th class="px-2 py-2 text-center text-orange-700">🚗 ${t('vehicles')}</th>` : ''}
+                                    ${showMonthly ? `<th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أيام حضور شهري' : 'Monthly att. days'}</th>` : ''}
+                                    ${showDaily ? `<th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أيام حضور يومي' : 'Daily att. days'}</th>` : ''}
+                                    ${showVehicles ? `<th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'أيام عمل آليات' : 'Vehicle work days'}</th>` : ''}
+                                    <th class="px-2 py-2 text-center">${t('absent')}</th>
+                                    <th class="px-2 py-2 text-center">${t('attendanceRate')}</th>
+                                    <th class="px-2 py-2 text-center text-emerald-700">${t('approvedRecords')}</th>
+                                    <th class="px-2 py-2 text-center text-amber-700">${t('unapprovedRecords')}</th>
+                                    <th class="px-2 py-2 text-center">${currentLanguage === 'ar' ? 'التفصيل اليومي' : 'Daily detail'}</th>
+                                    <th class="px-2 py-2 text-center no-print">${t('details')}</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y">
+                                ${rows.map(row => `
+                                    <tr class="hover:bg-gray-50">
+                                        <td class="px-2 py-2 font-medium">${row.name}<div class="text-gray-400 font-mono">${row.code}</div></td>
+                                        ${showMonthly ? `<td class="px-2 py-2 text-center text-purple-700 font-bold">${row.monthlyCount}</td>` : ''}
+                                        ${showDaily ? `<td class="px-2 py-2 text-center text-sky-700 font-bold">${row.dailyCount}</td>` : ''}
+                                        ${showVehicles ? `<td class="px-2 py-2 text-center text-orange-700 font-bold">${row.vehiclesCount}</td>` : ''}
+                                        ${showMonthly ? `<td class="px-2 py-2 text-center text-green-700">${row.monthlyAttendanceDays.toFixed(2)}</td>` : ''}
+                                        ${showDaily ? `<td class="px-2 py-2 text-center text-green-700">${row.dailyAttendanceDays.toFixed(2)}</td>` : ''}
+                                        ${showVehicles ? `<td class="px-2 py-2 text-center text-indigo-700">${row.vehicleWorkedDays.toFixed(2)}</td>` : ''}
+                                        <td class="px-2 py-2 text-center text-red-600">${row.absentRecords}</td>
+                                        <td class="px-2 py-2 text-center font-bold">${row.attendanceRate}%</td>
+                                        <td class="px-2 py-2 text-center text-emerald-700">${row.approvedRecords}</td>
+                                        <td class="px-2 py-2 text-center text-amber-700">${row.unapprovedRecords}</td>
+                                        <td class="px-2 py-2 text-center">
+                                            <button onclick="toggleSummaryDailyRows('${row.id}')" class="px-2 py-1 border rounded hover:bg-gray-100 no-print">📅</button>
+                                        </td>
+                                        <td class="px-2 py-2 text-center no-print">
+                                            <button onclick="openProjectReportFromSummary('${row.id}', '${fromNorm}', '${toNorm}')" class="px-2 py-1 border rounded hover:bg-gray-100">${t('view')}</button>
+                                        </td>
+                                    </tr>
+                                    <tr id="summary-daily-${row.id}" class="hidden">
+                                        <td colspan="${mainColsCount}" class="px-4 py-3 bg-gray-50">
+                                            <p class="font-bold text-gray-700 mb-2">📅 ${currentLanguage === 'ar' ? 'التفصيل اليومي' : 'Daily breakdown'} — ${row.name}</p>
+                                            <table class="w-full text-xs border">
+                                                <thead class="bg-white">
+                                                    <tr>
+                                                        <th class="px-2 py-1 text-right">${t('date')}</th>
+                                                        <th class="px-2 py-1 text-right">${currentLanguage === 'ar' ? 'اليوم' : 'Day'}</th>
+                                                        ${showMonthly ? `<th class="px-2 py-1 text-center text-purple-700">${currentLanguage === 'ar' ? 'حضور شهري' : 'Monthly'}</th>` : ''}
+                                                        ${showDaily ? `<th class="px-2 py-1 text-center text-sky-700">${currentLanguage === 'ar' ? 'حضور يومي' : 'Daily'}</th>` : ''}
+                                                        ${showVehicles ? `<th class="px-2 py-1 text-center text-orange-700">${currentLanguage === 'ar' ? 'عمل آليات' : 'Vehicles'}</th>` : ''}
+                                                        <th class="px-2 py-1 text-center">${t('absent')}</th>
+                                                        <th class="px-2 py-1 text-center text-emerald-700">${currentLanguage === 'ar' ? 'معتمد' : 'Approved'}</th>
+                                                        <th class="px-2 py-1 text-center text-amber-700">${currentLanguage === 'ar' ? 'غير معتمد' : 'Unapproved'}</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody class="divide-y bg-white">
+                                                    ${row.dailyBreakdown.map(day => {
+                                                        const isEmpty = day.monthlyDays === 0 && day.dailyDays === 0 && day.vehicleDays === 0 && day.absent === 0;
+                                                        return `
+                                                        <tr class="${isEmpty ? 'text-gray-300' : ''}">
+                                                            <td class="px-2 py-1 font-mono">${day.date}</td>
+                                                            <td class="px-2 py-1">${formatDayLabel(day.date)}</td>
+                                                            ${showMonthly ? `<td class="px-2 py-1 text-center">${isEmpty ? '-' : day.monthlyDays.toFixed(2)}</td>` : ''}
+                                                            ${showDaily ? `<td class="px-2 py-1 text-center">${isEmpty ? '-' : day.dailyDays.toFixed(2)}</td>` : ''}
+                                                            ${showVehicles ? `<td class="px-2 py-1 text-center">${isEmpty ? '-' : day.vehicleDays.toFixed(2)}</td>` : ''}
+                                                            <td class="px-2 py-1 text-center ${day.absent > 0 ? 'text-red-600' : ''}">${isEmpty ? '-' : day.absent}</td>
+                                                            <td class="px-2 py-1 text-center">${isEmpty ? '-' : day.approved}</td>
+                                                            <td class="px-2 py-1 text-center">${isEmpty ? '-' : day.unapproved}</td>
+                                                        </tr>`;
+                                                    }).join('')}
+                                                </tbody>
+                                            </table>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                                <tr class="bg-gray-100 font-bold">
+                                    <td class="px-2 py-2">${currentLanguage === 'ar' ? 'الإجمالي' : 'Total'}</td>
+                                    ${showMonthly ? `<td class="px-2 py-2 text-center">${totals.monthlyCount}</td>` : ''}
+                                    ${showDaily ? `<td class="px-2 py-2 text-center">${totals.dailyCount}</td>` : ''}
+                                    ${showVehicles ? `<td class="px-2 py-2 text-center">${totals.vehiclesCount}</td>` : ''}
+                                    ${showMonthly ? `<td class="px-2 py-2 text-center">${totals.monthlyAttendanceDays.toFixed(2)}</td>` : ''}
+                                    ${showDaily ? `<td class="px-2 py-2 text-center">${totals.dailyAttendanceDays.toFixed(2)}</td>` : ''}
+                                    ${showVehicles ? `<td class="px-2 py-2 text-center">${totals.vehicleWorkedDays.toFixed(2)}</td>` : ''}
+                                    <td class="px-2 py-2 text-center">${totals.absentRecords}</td>
+                                    <td class="px-2 py-2 text-center">${overallRate}%</td>
+                                    <td class="px-2 py-2 text-center">${totals.approvedRecords}</td>
+                                    <td class="px-2 py-2 text-center">${totals.unapprovedRecords}</td>
+                                    <td class="px-2 py-2"></td>
+                                    <td class="no-print"></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+            window._lastReportHtml = resultsContainer.innerHTML;
+        } catch (error) {
+            console.error('Error generating projects summary report:', error);
+            resultsContainer.innerHTML = `<p class="text-red-500 text-center py-8">${t('error')}</p>`;
+        }
     }
     
     async function generateProjectReport() {
