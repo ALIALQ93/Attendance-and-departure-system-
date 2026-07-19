@@ -1715,6 +1715,49 @@
     // ═══════════════════════════════════════════════════════════════════════
     // دوال المصادقة
     // ═══════════════════════════════════════════════════════════════════════
+
+    const APP_UPDATE_NOTICE_VERSION = '2026-07-19-attendance-reports-v1';
+
+    function showUpdateNoticeOnce() {
+        if (!currentUser) return;
+        const storageKey = `updateNotice_${APP_UPDATE_NOTICE_VERSION}_${currentUser.uid}`;
+        if (localStorage.getItem(storageKey) === 'seen') return;
+
+        // تسجيل المشاهدة قبل فتح النافذة لمنع تكرارها بسبب مستمع المصادقة.
+        localStorage.setItem(storageKey, 'seen');
+
+        setTimeout(() => {
+            const isArabic = currentLanguage === 'ar';
+            const content = `
+                <div class="space-y-4">
+                    <div class="p-4 rounded-xl bg-blue-50 border border-blue-200">
+                        <p class="font-bold text-blue-800">
+                            ${isArabic ? 'تم تحديث نظام الحضور والتقارير' : 'Attendance and reports were updated'}
+                        </p>
+                        <p class="text-sm text-blue-700 mt-1">
+                            ${isArabic ? 'تتوفر الآن التحسينات التالية:' : 'The following improvements are now available:'}
+                        </p>
+                    </div>
+                    <ul class="space-y-3 text-sm text-gray-700">
+                        <li class="flex gap-2"><span>🔎</span><span>${isArabic ? 'بحث وترتيب أبجدي A–Z أو Z–A في قسم الحضور.' : 'Search and A–Z/Z–A sorting in Attendance.'}</span></li>
+                        <li class="flex gap-2"><span>📋</span><span>${isArabic ? 'مراجعة وتعديل سجلات دوام الموظف ضمن فترة محددة.' : 'Review and edit employee attendance records for a selected period.'}</span></li>
+                        <li class="flex gap-2"><span>🔄</span><span>${isArabic ? 'تحسين احتساب نوع الموظف وتاريخ التحويل في التقارير.' : 'Improved employee type-change handling in reports.'}</span></li>
+                        <li class="flex gap-2"><span>💰</span><span>${isArabic ? 'تحسين تقارير أجور العاميين واحتساب الأجر اليومي الصحيح.' : 'Improved general wage reports and daily wage calculations.'}</span></li>
+                        <li class="flex gap-2"><span>🏗️</span><span>${isArabic ? 'خيار عرض تفاصيل المشاريع أو الإجماليات فقط في تقارير العاميين.' : 'Option to show project details or totals only in general reports.'}</span></li>
+                    </ul>
+                    <p class="text-xs text-gray-500">
+                        ${isArabic ? 'سيظهر هذا الإشعار مرة واحدة فقط لهذا المستخدم.' : 'This notice is shown only once for this user.'}
+                    </p>
+                </div>
+            `;
+            const footer = `
+                <button onclick="closeModal()" class="px-5 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">
+                    ${isArabic ? 'حسناً، فهمت' : 'Got it'}
+                </button>
+            `;
+            openModal(isArabic ? '✨ تحديث جديد' : '✨ New update', content, footer);
+        }, 500);
+    }
     
     // التحقق من وجود المدير وإنشائه
     async function checkAndCreateAdmin() {
@@ -1840,6 +1883,7 @@
             
             // عرض لوحة التحكم
             showPage('dashboard');
+            showUpdateNoticeOnce();
             
             return true;
         } catch (error) {
@@ -4953,6 +4997,9 @@
     let selectedYear = new Date().getFullYear();
     let selectedWeek = 0;
     let activeTab = 'monthly';
+    let attendanceSearchTerm = '';
+    let attendanceNameSort = 'asc';
+    let attendanceFilterTimer = null;
     
     const attendanceStatuses = {
         employee: [
@@ -5064,8 +5111,31 @@
                     
                     <!-- ملخص -->
                     <div id="attendance-summary" class="p-4 bg-gray-50 border-b">
-                        <div class="flex flex-wrap items-center gap-4 text-sm">
+                        <div class="flex flex-wrap items-end justify-between gap-4 text-sm">
                             <span id="summary-count">---</span>
+                            <div class="flex flex-wrap items-end gap-3">
+                                <div>
+                                    <label class="block text-xs text-gray-500 mb-1">${t('search')}</label>
+                                    <div class="relative">
+                                        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
+                                        <input type="search"
+                                               id="attendance-name-search"
+                                               value="${attendanceSearchTerm.replace(/"/g, '&quot;')}"
+                                               oninput="changeAttendanceNameSearch(this.value)"
+                                               placeholder="${currentLanguage === 'ar' ? 'ابحث بالاسم أو الكود' : 'Search by name or code'}"
+                                               class="w-56 border rounded-lg py-2 pr-9 pl-3 outline-none focus:ring-2 focus:ring-primary-500">
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-xs text-gray-500 mb-1">${currentLanguage === 'ar' ? 'ترتيب الأسماء' : 'Name order'}</label>
+                                    <select id="attendance-name-sort"
+                                            onchange="changeAttendanceNameSort(this.value)"
+                                            class="border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500">
+                                        <option value="asc" ${attendanceNameSort === 'asc' ? 'selected' : ''}>A → Z</option>
+                                        <option value="desc" ${attendanceNameSort === 'desc' ? 'selected' : ''}>Z → A</option>
+                                    </select>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     
@@ -5113,6 +5183,17 @@
         const months = ['january', 'february', 'march', 'april', 'may', 'june', 
                        'july', 'august', 'september', 'october', 'november', 'december'];
         return months[month];
+    }
+
+    function changeAttendanceNameSearch(value) {
+        attendanceSearchTerm = value || '';
+        clearTimeout(attendanceFilterTimer);
+        attendanceFilterTimer = setTimeout(() => loadAttendanceTable(), 300);
+    }
+
+    function changeAttendanceNameSort(value) {
+        attendanceNameSort = value === 'desc' ? 'desc' : 'asc';
+        loadAttendanceTable();
     }
     
     function getDaysInMonth(year, month) {
@@ -5286,6 +5367,26 @@
                     if (!window.employeesData.find(e => e.id === emp.id)) window.employeesData.push(emp);
                 });
             }
+
+            // البحث والترتيب الأبجدي موحّدان لجميع تبويبات الموظفين والآليات.
+            const normalizedSearch = attendanceSearchTerm.trim().toLocaleLowerCase(currentLanguage === 'ar' ? 'ar' : 'en');
+            if (normalizedSearch) {
+                items = items.filter(item => {
+                    const searchable = [item.name, item.code, item.jobTitle, item.plateNumber, item.internalNumber]
+                        .filter(Boolean)
+                        .join(' ')
+                        .toLocaleLowerCase(currentLanguage === 'ar' ? 'ar' : 'en');
+                    return searchable.includes(normalizedSearch);
+                });
+            }
+            items.sort((a, b) => {
+                const comparison = (a.name || '').localeCompare(
+                    b.name || '',
+                    currentLanguage === 'ar' ? 'ar' : 'en',
+                    { sensitivity: 'base', numeric: true }
+                );
+                return attendanceNameSort === 'desc' ? -comparison : comparison;
+            });
             
             // جلب بيانات الحضور للشهر
             const startDate = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-01`;
@@ -5464,13 +5565,54 @@
     
     function updateAttendanceSummary(items) {
         const summary = document.getElementById('attendance-summary');
+        if (!summary) return;
+        
+        const countLabel = `${(activeTab === 'vehicles' || activeTab === 'vehicles_general') ? t('vehicles') : t('employees')}: ${items.length}`;
+        const monthLabel = `${t('month')}: ${t(getMonthName(selectedMonth))} ${selectedYear}`;
+        
+        // تحديث العدد فقط إن كانت أدوات البحث/الترتيب موجودة (لتفادي مسحها)
+        const countEl = document.getElementById('summary-count');
+        if (countEl && document.getElementById('attendance-name-search')) {
+            countEl.innerHTML = `<span class="font-medium">${countLabel}</span><span class="mx-2">|</span><span>${monthLabel}</span>`;
+            const searchInput = document.getElementById('attendance-name-search');
+            const sortSelect = document.getElementById('attendance-name-sort');
+            if (searchInput && document.activeElement !== searchInput) {
+                searchInput.value = attendanceSearchTerm;
+            }
+            if (sortSelect) sortSelect.value = attendanceNameSort;
+            return;
+        }
+        
         summary.innerHTML = `
-            <div class="flex flex-wrap items-center gap-4 text-sm">
-                <span class="font-medium">
-                    ${(activeTab === 'vehicles' || activeTab === 'vehicles_general') ? t('vehicles') : t('employees')}: ${items.length}
+            <div class="flex flex-wrap items-end justify-between gap-4 text-sm">
+                <span id="summary-count">
+                    <span class="font-medium">${countLabel}</span>
+                    <span class="mx-2">|</span>
+                    <span>${monthLabel}</span>
                 </span>
-                <span>|</span>
-                <span>${t('month')}: ${t(getMonthName(selectedMonth))} ${selectedYear}</span>
+                <div class="flex flex-wrap items-end gap-3">
+                    <div>
+                        <label class="block text-xs text-gray-500 mb-1">${t('search')}</label>
+                        <div class="relative">
+                            <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
+                            <input type="search"
+                                   id="attendance-name-search"
+                                   value="${(attendanceSearchTerm || '').replace(/"/g, '&quot;')}"
+                                   oninput="changeAttendanceNameSearch(this.value)"
+                                   placeholder="${currentLanguage === 'ar' ? 'ابحث بالاسم أو الكود' : 'Search by name or code'}"
+                                   class="w-56 border rounded-lg py-2 pr-9 pl-3 outline-none focus:ring-2 focus:ring-primary-500">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-500 mb-1">${currentLanguage === 'ar' ? 'ترتيب الأسماء' : 'Name order'}</label>
+                        <select id="attendance-name-sort"
+                                onchange="changeAttendanceNameSort(this.value)"
+                                class="border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500">
+                            <option value="asc" ${attendanceNameSort === 'asc' ? 'selected' : ''}>A → Z</option>
+                            <option value="desc" ${attendanceNameSort === 'desc' ? 'selected' : ''}>Z → A</option>
+                        </select>
+                    </div>
+                </div>
             </div>
         `;
     }
@@ -10954,6 +11096,7 @@
                             updateUIForUser();
                             document.getElementById('app').classList.remove('hidden');
                             showPage('dashboard');
+                            showUpdateNoticeOnce();
                         } else {
                             // بيانات المستخدم غير موجودة
                             await auth.signOut();
