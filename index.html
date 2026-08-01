@@ -121,6 +121,50 @@
         .bg-status-completed { background-color: #3b82f6; }
         .bg-status-hidden { background-color: #6b7280; }
         
+        /* شريط تحديث الإصدار للمستخدمين المفتوحين */
+        #app-update-banner {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+            padding: 0.75rem 1rem;
+            background: linear-gradient(90deg, #1d4ed8, #2563eb);
+            color: white;
+            box-shadow: 0 4px 16px rgba(37, 99, 235, 0.35);
+            text-align: center;
+        }
+        #app-update-banner.show {
+            display: flex;
+        }
+        #app-update-banner button {
+            background: white;
+            color: #1d4ed8;
+            font-weight: 700;
+            padding: 0.4rem 1rem;
+            border-radius: 0.5rem;
+            border: none;
+            cursor: pointer;
+        }
+        #app-update-banner button:hover {
+            background: #eff6ff;
+        }
+        body.has-app-update #app {
+            padding-top: 3.25rem;
+        }
+        body.has-app-update header {
+            top: 3.25rem;
+        }
+        body.has-app-update #sidebar {
+            top: calc(4rem + 3.25rem);
+            height: calc(100vh - 4rem - 3.25rem);
+        }
+        
         /* Attendance Colors */
         .att-full { background-color: #10b981; }
         .att-partial { background-color: #f59e0b; }
@@ -680,6 +724,12 @@
     
     <!-- Toast Container -->
     <div id="toast-container"></div>
+    
+    <!-- شريط إشعار التحديث للمستخدمين المفتوحين -->
+    <div id="app-update-banner" role="alert">
+        <span id="app-update-banner-text"></span>
+        <button type="button" onclick="reloadForAppUpdate()">{تحديث الآن</button>
+    </div>
 
     <script>
     // ═══════════════════════════════════════════════════════════════════════
@@ -699,6 +749,65 @@
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
     const db = firebase.firestore();
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // مساعدات استعلام الحضور (فلترة بالتاريخ لتقليل قراءة Firestore)
+    // يتطلب فهارس مركّبة: projectId+date و employeeId+date — انظر firestore.indexes.json
+    // عند بناء الفهرس يُستخدم مسار احتياطي (جلب بالمشروع ثم فلترة محلية)
+    // ═══════════════════════════════════════════════════════════════════════
+    function isFirestoreIndexBuildingError(error) {
+        const msg = String(error?.message || error || '');
+        return error?.code === 'failed-precondition' ||
+            msg.includes('requires an index') ||
+            msg.includes('currently building');
+    }
+
+    function queryAttendanceByProjectAndDate(collectionName, projectId, startDate, endDate) {
+        return db.collection(collectionName)
+            .where('projectId', '==', projectId)
+            .where('date', '>=', startDate)
+            .where('date', '<=', endDate);
+    }
+
+    async function fetchAttendanceByProjectAndDate(collectionName, projectId, startDate, endDate) {
+        try {
+            return await queryAttendanceByProjectAndDate(collectionName, projectId, startDate, endDate).get();
+        } catch (error) {
+            if (!isFirestoreIndexBuildingError(error)) throw error;
+            // احتياطي أثناء بناء الفهرس
+            const snap = await db.collection(collectionName).where('projectId', '==', projectId).get();
+            const docs = snap.docs.filter(doc => {
+                const d = doc.data()?.date;
+                return d >= startDate && d <= endDate;
+            });
+            return { docs, empty: docs.length === 0, size: docs.length, forEach: (fn) => docs.forEach(fn) };
+        }
+    }
+
+    function fetchAttendanceForProjects(collectionName, projectIds, startDate, endDate) {
+        if (!projectIds || projectIds.length === 0) return Promise.resolve([]);
+        return Promise.all(
+            projectIds.map(id => fetchAttendanceByProjectAndDate(collectionName, id, startDate, endDate))
+        );
+    }
+
+    async function fetchAttendanceByEmployeeAndDate(employeeId, startDate, endDate) {
+        try {
+            return await db.collection('attendance')
+                .where('employeeId', '==', employeeId)
+                .where('date', '>=', startDate)
+                .where('date', '<=', endDate)
+                .get();
+        } catch (error) {
+            if (!isFirestoreIndexBuildingError(error)) throw error;
+            const snap = await db.collection('attendance').where('employeeId', '==', employeeId).get();
+            const docs = snap.docs.filter(doc => {
+                const d = doc.data()?.date;
+                return d >= startDate && d <= endDate;
+            });
+            return { docs, empty: docs.length === 0, size: docs.length, forEach: (fn) => docs.forEach(fn) };
+        }
+    }
 
     // ═══════════════════════════════════════════════════════════════════════
     // المتغيرات العامة
@@ -1716,8 +1825,24 @@
     // دوال المصادقة
     // ═══════════════════════════════════════════════════════════════════════
 
-    const APP_VERSION = '2026.07.19.2';
-    const APP_UPDATE_NOTICE_VERSION = '2026-07-19-project-summary-v2';
+    const APP_VERSION = '2026.08.01.1';
+    const APP_UPDATE_NOTICE_VERSION = '2026-08-01-performance-v1';
+    const APP_UPDATE_NOTES = {
+        ar: [
+            'تسريع جداول الحضور والتقارير عبر جلب الفترة المطلوبة فقط من قاعدة البيانات.',
+            'تحسين لوحة التحكم لتقليل التحميل عند الدخول.',
+            'تقييد مستمع الإشعارات لغير المقروءة فقط.',
+            'تحديث خلايا الحضور فوراً دون إعادة تحميل الجدول كاملاً.',
+            'إشعار فوري عند توفر إصدار جديد لمن لديهم النظام مفتوحاً.'
+        ],
+        en: [
+            'Faster attendance tables and reports by fetching only the selected date range.',
+            'Lighter dashboard loading on login.',
+            'Notifications listener limited to unread items.',
+            'Attendance cells update instantly without full table reload.',
+            'Live notice for users who already have the system open when a new version is released.'
+        ]
+    };
 
     function showUpdateNoticeOnce() {
         if (!currentUser) return;
@@ -1729,12 +1854,13 @@
 
         setTimeout(() => {
             const isArabic = currentLanguage === 'ar';
+            const notes = isArabic ? APP_UPDATE_NOTES.ar : APP_UPDATE_NOTES.en;
             const content = `
                 <div class="space-y-4">
                     <div class="p-4 rounded-xl bg-blue-50 border border-blue-200">
                         <div class="flex items-center justify-between gap-3">
                             <p class="font-bold text-blue-800">
-                                ${isArabic ? 'تم تحديث نظام الحضور والتقارير' : 'Attendance and reports were updated'}
+                                ${isArabic ? 'تم تحديث نظام الحضور والانصراف' : 'Attendance system was updated'}
                             </p>
                             <span class="shrink-0 px-2 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-mono">
                                 v${APP_VERSION}
@@ -1745,12 +1871,7 @@
                         </p>
                     </div>
                     <ul class="space-y-3 text-sm text-gray-700">
-                        <li class="flex gap-2"><span>📊</span><span>${isArabic ? 'إضافة تقرير ملخص المشاريع مع إمكانية تحديد الأنواع: شهري، يومي، وآليات.' : 'Added Projects Summary Report with monthly, daily, and vehicle type filters.'}</span></li>
-                        <li class="flex gap-2"><span>📅</span><span>${isArabic ? 'إضافة تفصيل يومي للحضور والعمل داخل ملخص كل مشروع.' : 'Added daily attendance and work breakdown for every project.'}</span></li>
-                        <li class="flex gap-2"><span>👷</span><span>${isArabic ? 'تصحيح أعداد الموظفين لتُحتسب حسب الدوام الفعلي ونوع الموظف في تاريخ الدوام.' : 'Corrected employee counts based on actual attendance and type at the attendance date.'}</span></li>
-                        <li class="flex gap-2"><span>✅</span><span>${isArabic ? 'الموظف يُحتسب في المشروع الذي داوم فيه فقط، ومرة واحدة في الإجمالي مهما تعددت مشاريعه.' : 'Employees count only in projects where they attended and once in the grand total.'}</span></li>
-                        <li class="flex gap-2"><span>🔄</span><span>${isArabic ? 'تحسين معالجة تحويل نوع الموظف ومنع تكرار الدوام في التقارير.' : 'Improved employee type conversions and prevented duplicate attendance in reports.'}</span></li>
-                        <li class="flex gap-2"><span>📋</span><span>${isArabic ? 'مراجعة وتعديل سجلات دوام الموظف ضمن فترة محددة، مع البحث والترتيب الأبجدي.' : 'Review and edit attendance for a selected period, with search and alphabetical sorting.'}</span></li>
+                        ${notes.map(n => `<li class="flex gap-2"><span>⚡</span><span>${n}</span></li>`).join('')}
                     </ul>
                     <p class="text-xs text-gray-500">
                         ${isArabic ? 'سيظهر هذا الإشعار مرة واحدة فقط لهذا المستخدم.' : 'This notice is shown only once for this user.'}
@@ -1764,6 +1885,202 @@
             `;
             openModal(isArabic ? '✨ تحديث جديد' : '✨ New update', content, footer);
         }, 500);
+    }
+
+    function showAppUpdateBanner(meta = {}) {
+        const banner = document.getElementById('app-update-banner');
+        const textEl = document.getElementById('app-update-banner-text');
+        if (!banner || !textEl) return;
+        // لا تعرض الشريط إذا كنا أصلاً على نفس الإصدار
+        if (meta.version && meta.version === APP_VERSION) {
+            hideAppUpdateBanner();
+            return;
+        }
+        if (meta.forceToken) {
+            sessionStorage.setItem('appForceTokenPending', String(meta.forceToken));
+        }
+        const isArabic = currentLanguage === 'ar';
+        const msg = isArabic
+            ? (meta.messageAr || `يتوفر تحديث جديد (v${meta.version || ''}). يرجى تحديث الصفحة الآن.`)
+            : (meta.messageEn || `A new update is available (v${meta.version || ''}). Please refresh now.`);
+        const btn = banner.querySelector('button');
+        if (btn) btn.textContent = isArabic ? 'تحديث الآن' : 'Refresh now';
+        textEl.textContent = msg;
+        const wasHidden = !banner.classList.contains('show');
+        banner.classList.add('show');
+        document.body.classList.add('has-app-update');
+        if (wasHidden) {
+            try { playNotificationSound(); } catch (_) {}
+        }
+    }
+
+    function hideAppUpdateBanner() {
+        const banner = document.getElementById('app-update-banner');
+        if (banner) banner.classList.remove('show');
+        document.body.classList.remove('has-app-update');
+    }
+
+    function isAppUpdateRelevantForThisClient(data) {
+        if (!data) return false;
+        const v = data.version;
+        // إخفاء إشعار التحديث بعد أن تصبح الصفحة على نفس الإصدار أو أحدث
+        if (!v || v === APP_VERSION || v < APP_VERSION) return false;
+        return true;
+    }
+
+    function reloadForAppUpdate() {
+        const pending = sessionStorage.getItem('appForceTokenPending');
+        if (pending) {
+            sessionStorage.setItem('appForceTokenSeen', pending);
+            sessionStorage.removeItem('appForceTokenPending');
+        }
+        localStorage.setItem('appVersionSeen', APP_VERSION);
+        const url = new URL(window.location.href);
+        url.searchParams.set('_v', APP_VERSION);
+        url.searchParams.set('_t', String(Date.now()));
+        window.location.replace(url.toString());
+    }
+
+    async function publishAppVersionIfNeeded() {
+        if (!currentUser) return;
+        try {
+            localStorage.setItem('appVersionSeen', APP_VERSION);
+            hideAppUpdateBanner();
+
+            const ref = db.collection('settings').doc('appMeta');
+            const snap = await ref.get();
+            const remote = snap.exists ? snap.data() : null;
+            if (remote?.forceToken) {
+                sessionStorage.setItem('appForceTokenSeen', String(remote.forceToken));
+            }
+            if (remote?.version === APP_VERSION) return;
+
+            const messageAr = 'يتوفر تحديث جديد للنظام (تحسينات الأداء). يرجى تحديث الصفحة الآن.';
+            const messageEn = 'A new system update is available (performance improvements). Please refresh the page now.';
+
+            await ref.set({
+                version: APP_VERSION,
+                minClientVersion: APP_VERSION,
+                messageAr,
+                messageEn,
+                noticeId: APP_UPDATE_NOTICE_VERSION,
+                forceToken: 0,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                updatedBy: currentUser.uid
+            }, { merge: true });
+
+            // بث لمن ما زالوا على إصدار أقدم (يُخفى تلقائياً لمن لديهم نفس الإصدار)
+            try {
+                const oldSnap = await db.collection('notifications')
+                    .where('type', '==', 'appUpdate')
+                    .limit(50)
+                    .get();
+                const batch = db.batch();
+                oldSnap.forEach(doc => {
+                    if (doc.data().read === false) batch.update(doc.ref, { read: true });
+                });
+                batch.set(db.collection('notifications').doc(), {
+                    type: 'appUpdate',
+                    broadcast: true,
+                    read: false,
+                    version: APP_VERSION,
+                    titleAr: 'تحديث جديد للنظام',
+                    titleEn: 'New system update',
+                    messageAr,
+                    messageEn,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                await batch.commit();
+            } catch (notifErr) {
+                console.warn('Could not broadcast update notification:', notifErr);
+            }
+        } catch (error) {
+            console.warn('publishAppVersionIfNeeded:', error);
+        }
+    }
+
+    function startAppVersionListener() {
+        if (appVersionUnsubscribe) {
+            appVersionUnsubscribe();
+            appVersionUnsubscribe = null;
+        }
+        appVersionUnsubscribe = db.collection('settings').doc('appMeta').onSnapshot(doc => {
+            if (!doc.exists) {
+                hideAppUpdateBanner();
+                return;
+            }
+            const data = doc.data() || {};
+            const remoteVersion = data.version || '';
+
+            // الصفحة الحالية محدّثة → أخفِ الشريط دائماً
+            if (!remoteVersion || remoteVersion === APP_VERSION) {
+                if (data.forceToken) {
+                    sessionStorage.setItem('appForceTokenSeen', String(data.forceToken));
+                }
+                hideAppUpdateBanner();
+                return;
+            }
+
+            showAppUpdateBanner(data);
+        }, error => {
+            console.warn('Error listening to app version:', error);
+        });
+    }
+
+    async function forceNotifyAppUpdate() {
+        if (currentUserData?.role !== 'manager') {
+            showToast(t('error'), 'error');
+            return;
+        }
+        const isArabic = currentLanguage === 'ar';
+        if (!confirm(isArabic
+            ? 'إرسال إشعار تحديث لجميع المستخدمين المفتوحين الآن؟'
+            : 'Send an update notice to all users who currently have the system open?')) {
+            return;
+        }
+        try {
+            const messageAr = `يتوفر تحديث جديد للنظام (v${APP_VERSION}). يرجى تحديث الصفحة الآن.`;
+            const messageEn = `A new system update is available (v${APP_VERSION}). Please refresh the page now.`;
+            const forceToken = Date.now();
+            await db.collection('settings').doc('appMeta').set({
+                version: APP_VERSION,
+                minClientVersion: APP_VERSION,
+                messageAr,
+                messageEn,
+                noticeId: APP_UPDATE_NOTICE_VERSION,
+                forceToken,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                updatedBy: currentUser.uid
+            }, { merge: true });
+
+            const oldSnap = await db.collection('notifications')
+                .where('type', '==', 'appUpdate')
+                .limit(50)
+                .get();
+            const batch = db.batch();
+            oldSnap.forEach(doc => {
+                if (doc.data().read === false) batch.update(doc.ref, { read: true });
+            });
+            batch.set(db.collection('notifications').doc(), {
+                type: 'appUpdate',
+                broadcast: true,
+                read: false,
+                version: APP_VERSION,
+                forceToken,
+                titleAr: 'تحديث جديد للنظام',
+                titleEn: 'New system update',
+                messageAr,
+                messageEn,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            await batch.commit();
+            sessionStorage.setItem('appForceTokenSeen', String(forceToken));
+            hideAppUpdateBanner();
+            showToast(isArabic ? 'تم إرسال إشعار التحديث' : 'Update notice sent', 'success');
+        } catch (error) {
+            console.error('forceNotifyAppUpdate:', error);
+            showToast(t('error'), 'error');
+        }
     }
     
     // التحقق من وجود المدير وإنشائه
@@ -1935,6 +2252,8 @@
         // بدء الاستماع للإشعارات في الوقت الفعلي
         startNotificationsListener();
         startUserStatusListener();
+        startAppVersionListener();
+        publishAppVersionIfNeeded();
     }
 
     function startUserStatusListener() {
@@ -1968,6 +2287,7 @@
     let notificationsUnsubscribe = null;
     let attendanceUnsubscribe = null;
     let userStatusUnsubscribe = null;
+    let appVersionUnsubscribe = null;
     
     // بدء الاستماع للإشعارات في الوقت الفعلي
     function startNotificationsListener() {
@@ -1976,22 +2296,29 @@
             notificationsUnsubscribe();
         }
         
-        // الاستماع للتغييرات في الوقت الفعلي
-        notificationsUnsubscribe = db.collection('notifications').onSnapshot(snapshot => {
+        // الاستماع للتغييرات في الوقت الفعلي (غير المقروءة فقط + حد أقصى)
+        notificationsUnsubscribe = db.collection('notifications')
+            .where('read', '==', false)
+            .limit(100)
+            .onSnapshot(snapshot => {
             let notifications = [];
             snapshot.forEach(doc => {
                 const data = doc.data();
-                // تصفية: فقط غير المقروءة
-                if (data.read === false) {
-                    // للمشرف: فقط الإشعارات المتعلقة بمشاريعه
-                    if (currentUserData?.role === 'supervisor' && currentUserData.assignedProjects?.length > 0) {
-                        if (currentUserData.assignedProjects.includes(data.targetProjectId)) {
-                            notifications.push({ id: doc.id, ...data });
-                        }
-                    } else {
-                        // للمدير: كل الإشعارات
+                // إشعارات التحديث: تظهر فقط لمن ما زالوا على إصدار أقدم
+                if (data.broadcast === true || data.type === 'appUpdate') {
+                    if (isAppUpdateRelevantForThisClient(data)) {
                         notifications.push({ id: doc.id, ...data });
                     }
+                    return;
+                }
+                // للمشرف: فقط الإشعارات المتعلقة بمشاريعه
+                if (currentUserData?.role === 'supervisor' && currentUserData.assignedProjects?.length > 0) {
+                    if (currentUserData.assignedProjects.includes(data.targetProjectId)) {
+                        notifications.push({ id: doc.id, ...data });
+                    }
+                } else {
+                    // للمدير: كل الإشعارات غير المقروءة
+                    notifications.push({ id: doc.id, ...data });
                 }
             });
             
@@ -2049,6 +2376,11 @@
             userStatusUnsubscribe();
             userStatusUnsubscribe = null;
         }
+        if (appVersionUnsubscribe) {
+            appVersionUnsubscribe();
+            appVersionUnsubscribe = null;
+        }
+        hideAppUpdateBanner();
     }
     
     // عرض الإشعارات
@@ -2078,6 +2410,25 @@
                 listEl.innerHTML = `<p class="p-4 text-gray-500 text-center">${t('noNotifications')}</p>`;
             } else {
                 listEl.innerHTML = notifications.map(notif => {
+                    if (notif.type === 'appUpdate') {
+                        const title = currentLanguage === 'ar' ? (notif.titleAr || 'تحديث جديد') : (notif.titleEn || 'New update');
+                        const msg = currentLanguage === 'ar' ? (notif.messageAr || '') : (notif.messageEn || '');
+                        return `
+                            <div class="p-4 border-b hover:bg-gray-50">
+                                <div class="flex items-start gap-3">
+                                    <span class="text-2xl">🔄</span>
+                                    <div class="flex-1">
+                                        <p class="font-medium text-sm">${title}</p>
+                                        <p class="text-xs text-gray-600 mt-1">${msg}</p>
+                                        ${notif.version ? `<p class="text-xs text-gray-400 mt-1 font-mono">v${notif.version}</p>` : ''}
+                                        <button onclick="reloadForAppUpdate()" class="mt-2 px-3 py-1 text-xs bg-primary-600 text-white rounded hover:bg-primary-700">
+                                            ${currentLanguage === 'ar' ? 'تحديث الصفحة' : 'Refresh page'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }
                     if (notif.type === 'missionAttendance') {
                         const dateParts = notif.date?.split('-') || [];
                         const formattedDate = dateParts.length === 3 ? `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}` : notif.date;
@@ -2278,18 +2629,35 @@
         container.innerHTML = `<div class="text-center py-8"><div class="loader mx-auto"></div></div>`;
         
         try {
-            // جلب الإحصائيات
-            const [projectsSnap, employeesSnap, vehiclesSnap] = await Promise.all([
-                db.collection('projects').where('status', '==', 'active').get(),
-                db.collection('employees').where('status', '==', 'active').get(),
-                db.collection('vehicles').where('status', '==', 'active').get()
-            ]);
+            // مشروع واحد يكفي: القائمة + عدّ الموظفين/الآليات من الحقول المخزّنة على المشروع
+            const projectsSnap = await db.collection('projects').where('status', '==', 'active').get();
+            const projects = [];
+            let employeesTotal = 0;
+            let vehiclesTotal = 0;
+            projectsSnap.forEach(doc => {
+                const project = { id: doc.id, ...doc.data() };
+                projects.push(project);
+                employeesTotal += project.employeesCount || 0;
+                vehiclesTotal += project.vehiclesCount || 0;
+            });
             
             const stats = {
-                projects: projectsSnap.size,
-                employees: employeesSnap.size,
-                vehicles: vehiclesSnap.size
+                projects: projects.length,
+                employees: employeesTotal,
+                vehicles: vehiclesTotal
             };
+            
+            const projectsHtml = projects.length === 0
+                ? `<p class="text-gray-500 text-center py-4">${t('noProjects')}</p>`
+                : projects.map(project => `
+                    <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div>
+                            <p class="font-medium">${project.name}</p>
+                            <p class="text-sm text-gray-500">${project.code || ''} ${project.contractNumber ? '| ' + project.contractNumber : ''}</p>
+                        </div>
+                        <span class="px-2 py-1 text-xs rounded-full bg-green-100 text-green-600">${t('active')}</span>
+                    </div>
+                `).join('');
             
             container.innerHTML = `
                 <!-- إحصائيات سريعة -->
@@ -2346,27 +2714,10 @@
                         </button>
                     </div>
                     <div id="dashboard-projects" class="space-y-3">
-                        ${stats.projects === 0 ? `<p class="text-gray-500 text-center py-4">${t('noProjects')}</p>` : ''}
+                        ${projectsHtml}
                     </div>
                 </div>
             `;
-            
-            // تحميل قائمة المشاريع
-            if (stats.projects > 0) {
-                const projectsList = document.getElementById('dashboard-projects');
-                projectsSnap.forEach(doc => {
-                    const project = doc.data();
-                    projectsList.innerHTML += `
-                        <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                            <div>
-                                <p class="font-medium">${project.name}</p>
-                                <p class="text-sm text-gray-500">${project.code} ${project.contractNumber ? '| ' + project.contractNumber : ''}</p>
-                            </div>
-                            <span class="px-2 py-1 text-xs rounded-full bg-green-100 text-green-600">${t('active')}</span>
-                        </div>
-                    `;
-                });
-            }
             
         } catch (error) {
             console.error('Error loading dashboard:', error);
@@ -3038,12 +3389,13 @@
                 .get();
             
             if (!allAttendanceSnap.empty && currentUserData.role === 'manager') {
-                // للمدير: حذف جميع سجلات الحضور القديمة تلقائياً
-                const deleteBatch = db.batch();
-                allAttendanceSnap.forEach(doc => {
-                    deleteBatch.delete(doc.ref);
-                });
-                await deleteBatch.commit();
+                // للمدير: حذف جميع سجلات الحضور القديمة تلقائياً (دفعات ≤450)
+                const docs = allAttendanceSnap.docs;
+                for (let i = 0; i < docs.length; i += 450) {
+                    const deleteBatch = db.batch();
+                    docs.slice(i, i + 450).forEach(doc => deleteBatch.delete(doc.ref));
+                    await deleteBatch.commit();
+                }
             } else if (!allAttendanceSnap.empty) {
                 // للمستخدمين الآخرين: منع الحذف
                 showToast(t('cannotDeleteEmployeeWithAttendance'), 'error');
@@ -3839,13 +4191,16 @@
                     .get();
                 
                 if (!oldAttendanceSnap.empty) {
-                    const updateBatch = db.batch();
-                    oldAttendanceSnap.forEach(doc => {
-                        updateBatch.update(doc.ref, {
-                            projectId: toProjectId
+                    const docs = oldAttendanceSnap.docs;
+                    for (let i = 0; i < docs.length; i += 450) {
+                        const updateBatch = db.batch();
+                        docs.slice(i, i + 450).forEach(doc => {
+                            updateBatch.update(doc.ref, {
+                                projectId: toProjectId
+                            });
                         });
-                    });
-                    await updateBatch.commit();
+                        await updateBatch.commit();
+                    }
                 }
             } catch (attError) {
                 console.error('Error updating old attendance records:', attError);
@@ -5238,47 +5593,51 @@
         }
         
         const collection = activeTab === 'vehicles' ? 'vehicleAttendance' : 'attendance';
+        const startDate = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-01`;
+        const endDate = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${getDaysInMonth(selectedYear, selectedMonth)}`;
         
-        // الاستماع للتغييرات
-        attendanceUnsubscribe = db.collection(collection)
-            .where('projectId', '==', selectedProject)
-            .onSnapshot(snapshot => {
-                // تحديث بيانات الحضور المحلية
-                const startDate = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-01`;
-                const endDate = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${getDaysInMonth(selectedYear, selectedMonth)}`;
-                
-                // تحديث فقط السجلات المتغيرة
+        // الاستماع لتغييرات الشهر الحالي فقط
+        const attachListener = (queryRef, filterByDate = false) => {
+            attendanceUnsubscribe = queryRef.onSnapshot(snapshot => {
                 snapshot.docChanges().forEach(change => {
                     const data = change.doc.data();
+                    if (filterByDate && (data.date < startDate || data.date > endDate)) return;
                     const key = `${data.employeeId || data.vehicleId}_${data.date}`;
                     
-                    if (data.date >= startDate && data.date <= endDate) {
-                        if (change.type === 'removed') {
-                            delete attendanceData[key];
-                        } else {
-                            attendanceData[key] = { id: change.doc.id, ...data };
-                        }
+                    if (change.type === 'removed') {
+                        delete attendanceData[key];
+                    } else {
+                        attendanceData[key] = { id: change.doc.id, ...data };
                     }
                 });
                 
-                // إعادة رسم الجدول فقط إذا كانت هناك تغييرات من مستخدم آخر
-                // (تجنب إعادة الرسم عند التغييرات المحلية)
                 const hasRemoteChanges = snapshot.docChanges().some(change => {
                     const data = change.doc.data();
                     return data.recordedBy !== currentUser?.uid;
                 });
                 
                 if (hasRemoteChanges && Object.keys(attendanceChanges).length === 0) {
-                    // تحديث الجدول بدون إعادة تحميل كاملة
                     refreshAttendanceTableUI();
                 }
             }, error => {
+                if (isFirestoreIndexBuildingError(error) && !filterByDate) {
+                    console.warn('Attendance index building — falling back to project listener');
+                    if (attendanceUnsubscribe) attendanceUnsubscribe();
+                    attachListener(
+                        db.collection(collection).where('projectId', '==', selectedProject),
+                        true
+                    );
+                    return;
+                }
                 console.error('Error listening to attendance:', error);
             });
+        };
+        
+        attachListener(queryAttendanceByProjectAndDate(collection, selectedProject, startDate, endDate), false);
     }
     
     // تحديث واجهة جدول الحضور بدون إعادة تحميل كاملة
-    function refreshAttendanceTableUI() {
+    function refreshAttendanceTableUI(silent = false) {
         // تحديث الخلايا المرئية
         document.querySelectorAll('.attendance-cell').forEach(cell => {
             const itemId = cell.dataset.itemId;
@@ -5289,15 +5648,14 @@
             const record = attendanceChanges[key] || attendanceData[key];
             
             const statuses = (activeTab === 'vehicles' || activeTab === 'vehicles_general') ? attendanceStatuses.vehicle : attendanceStatuses.employee;
-            const statusInfo = record ? statuses.find(s => s.key === record.status) : null;
+            const statusInfo = record && !record._delete ? statuses.find(s => s.key === record.status) : null;
             
             // تحديث الخلية
             cell.className = `attendance-cell w-10 h-10 rounded-lg flex items-center justify-center mx-auto text-lg ${statusInfo ? statusInfo.color + ' text-white' : 'bg-gray-100 hover:bg-gray-200'}`;
             cell.innerHTML = statusInfo ? statusInfo.icon : '';
         });
         
-        // إظهار إشعار بالتحديث
-        showToast(t('dataUpdated'), 'info');
+        if (!silent) showToast(t('dataUpdated'), 'info');
     }
     
     async function loadAttendanceTable() {
@@ -5402,24 +5760,30 @@
             
             attendanceData = {};
             if (isGeneralTab && allowedProjects.length > 0) {
-                for (const p of allowedProjects) {
-                    const snap = await db.collection(collection).where('projectId', '==', p.id).get();
+                const snaps = await fetchAttendanceForProjects(
+                    collection,
+                    allowedProjects.map(p => p.id),
+                    startDate,
+                    endDate
+                );
+                snaps.forEach(snap => {
                     snap.forEach(doc => {
                         const data = doc.data();
-                        if (data.date >= startDate && data.date <= endDate) {
-                            const key = `${data.employeeId || data.vehicleId}_${data.date}`;
-                            attendanceData[key] = { id: doc.id, ...data };
-                        }
-                    });
-                }
-            } else if (!isGeneralTab && selectedProject) {
-                const attendanceSnap = await db.collection(collection).where('projectId', '==', selectedProject).get();
-                attendanceSnap.forEach(doc => {
-                    const data = doc.data();
-                    if (data.date >= startDate && data.date <= endDate) {
                         const key = `${data.employeeId || data.vehicleId}_${data.date}`;
                         attendanceData[key] = { id: doc.id, ...data };
-                    }
+                    });
+                });
+            } else if (!isGeneralTab && selectedProject) {
+                const attendanceSnap = await fetchAttendanceByProjectAndDate(
+                    collection,
+                    selectedProject,
+                    startDate,
+                    endDate
+                );
+                attendanceSnap.forEach(doc => {
+                    const data = doc.data();
+                    const key = `${data.employeeId || data.vehicleId}_${data.date}`;
+                    attendanceData[key] = { id: doc.id, ...data };
                 });
             }
             
@@ -6103,7 +6467,7 @@
         
         closeModal();
         updateSaveButton();
-        loadAttendanceTable();
+        refreshAttendanceTableUI(true);
     }
     
     // للتوافق مع الكود القديم
@@ -6124,7 +6488,7 @@
         
         closeModal();
         updateSaveButton();
-        loadAttendanceTable();
+        refreshAttendanceTableUI(true);
     }
     
     function updateSaveButton() {
@@ -7646,7 +8010,7 @@
             const fromNorm = toYyyyMmDd(fromDate) || fromDate;
             const toNorm = toYyyyMmDd(toDate) || toDate;
             
-            const attSnap = await db.collection('attendance').where('employeeId', '==', employeeId).get();
+            const attSnap = await fetchAttendanceByEmployeeAndDate(employeeId, fromNorm, toNorm);
             const records = [];
             attSnap.forEach(doc => {
                 const data = doc.data();
@@ -8118,9 +8482,9 @@
 
             const rows = await Promise.all(projects.map(async project => {
                 const [attendanceSnap, vehicleAttendanceSnap] = await Promise.all([
-                    db.collection('attendance').where('projectId', '==', project.id).get(),
+                    fetchAttendanceByProjectAndDate('attendance', project.id, fromNorm, toNorm),
                     showVehicles
-                        ? db.collection('vehicleAttendance').where('projectId', '==', project.id).get()
+                        ? fetchAttendanceByProjectAndDate('vehicleAttendance', project.id, fromNorm, toNorm)
                         : Promise.resolve(null)
                 ]);
 
@@ -8424,44 +8788,57 @@
                 return;
             }
             
-            // جلب كل البيانات لجميع المشاريع
+            // جلب البيانات لجميع المشاريع بالتوازي مع فلترة التاريخ في Firestore
             let allEmployees = [];
             let allVehicles = [];
             let allAttendance = {};
             let allVehicleAttendance = {};
+            const fromNormEarly = toYyyyMmDd(fromDate) || fromDate;
+            const toNormEarly = toYyyyMmDd(toDate) || toDate;
             
-            for (const project of projects) {
-                // جلب الموظفين
-                const empSnap = await db.collection('employees').where('projectId', '==', project.id).get();
-                empSnap.forEach(doc => allEmployees.push({ id: doc.id, ...doc.data() }));
-                
-                // جلب الآليات
-                const vehSnap = await db.collection('vehicles').where('projectId', '==', project.id).get();
-                vehSnap.forEach(doc => allVehicles.push({ id: doc.id, ...doc.data() }));
-                
-                // جلب الحضور للموظفين (توحيد التاريخ yyyy-mm-dd للمقارنة الصحيحة)
-                const attSnap = await db.collection('attendance').where('projectId', '==', project.id).get();
-                const fromNorm = toYyyyMmDd(fromDate) || fromDate;
-                const toNorm = toYyyyMmDd(toDate) || toDate;
+            const projectResults = await Promise.all(projects.map(async project => {
+                const [empSnap, vehSnap, attSnap, vehAttSnap] = await Promise.all([
+                    db.collection('employees').where('projectId', '==', project.id).get(),
+                    db.collection('vehicles').where('projectId', '==', project.id).get(),
+                    fetchAttendanceByProjectAndDate('attendance', project.id, fromNormEarly, toNormEarly),
+                    fetchAttendanceByProjectAndDate('vehicleAttendance', project.id, fromNormEarly, toNormEarly)
+                ]);
+                const employees = [];
+                const vehicles = [];
+                const attendance = {};
+                const vehicleAttendance = {};
+                empSnap.forEach(doc => employees.push({ id: doc.id, ...doc.data() }));
+                vehSnap.forEach(doc => vehicles.push({ id: doc.id, ...doc.data() }));
                 attSnap.forEach(doc => {
                     const data = doc.data();
                     const dateStr = toYyyyMmDd(data.date);
-                    if (dateStr && dateStr >= fromNorm && dateStr <= toNorm) {
-                        if (!allAttendance[data.employeeId]) allAttendance[data.employeeId] = [];
-                        allAttendance[data.employeeId].push({ ...data, date: dateStr });
+                    if (dateStr && dateStr >= fromNormEarly && dateStr <= toNormEarly) {
+                        if (!attendance[data.employeeId]) attendance[data.employeeId] = [];
+                        attendance[data.employeeId].push({ ...data, date: dateStr });
                     }
                 });
-                
-                // جلب حضور الآليات
-                const vehAttSnap = await db.collection('vehicleAttendance').where('projectId', '==', project.id).get();
                 vehAttSnap.forEach(doc => {
                     const data = doc.data();
                     const dateStr = toYyyyMmDd(data.date);
-                    if (dateStr && dateStr >= fromNorm && dateStr <= toNorm) {
-                        if (!allVehicleAttendance[data.vehicleId]) allVehicleAttendance[data.vehicleId] = [];
-                        allVehicleAttendance[data.vehicleId].push({ ...data, date: dateStr });
+                    if (dateStr && dateStr >= fromNormEarly && dateStr <= toNormEarly) {
+                        if (!vehicleAttendance[data.vehicleId]) vehicleAttendance[data.vehicleId] = [];
+                        vehicleAttendance[data.vehicleId].push({ ...data, date: dateStr });
                     }
                 });
+                return { employees, vehicles, attendance, vehicleAttendance };
+            }));
+            
+            for (const result of projectResults) {
+                allEmployees.push(...result.employees);
+                allVehicles.push(...result.vehicles);
+                for (const [empId, records] of Object.entries(result.attendance)) {
+                    if (!allAttendance[empId]) allAttendance[empId] = [];
+                    allAttendance[empId].push(...records);
+                }
+                for (const [vehId, records] of Object.entries(result.vehicleAttendance)) {
+                    if (!allVehicleAttendance[vehId]) allVehicleAttendance[vehId] = [];
+                    allVehicleAttendance[vehId].push(...records);
+                }
             }
             
             // إخفاء غير النشطين إذا لم يُختر خيار إظهارهم
@@ -8871,13 +9248,11 @@
                 ? currentUserData.assignedProjects
                 : null;
             
-            // جلب كل سجلات حضور الموظف ثم التصفية (مخصص: مشروع واحد | عام: كل المشاريع المعيّنة له)
-            const attSnap = await db.collection('attendance')
-                .where('employeeId', '==', employeeId)
-                .get();
-            
+            // جلب سجلات حضور الموظف ضمن الفترة فقط
             const fromNorm = toYyyyMmDd(fromDate) || fromDate;
             const toNorm = toYyyyMmDd(toDate) || toDate;
+            const attSnap = await fetchAttendanceByEmployeeAndDate(employeeId, fromNorm, toNorm);
+            
             const attendance = [];
             attSnap.forEach(doc => {
                 const data = doc.data();
@@ -9122,23 +9497,35 @@
 
             let allEmployees = [];
             let allAttendance = {};
-            for (const project of projects) {
-                const empSnap = await db.collection('employees').where('projectId', '==', project.id).get();
+            const fromNormEarly = toYyyyMmDd(fromDate) || fromDate;
+            const toNormEarly = toYyyyMmDd(toDate) || toDate;
+            const wagesResults = await Promise.all(projects.map(async project => {
+                const [empSnap, attSnap] = await Promise.all([
+                    db.collection('employees').where('projectId', '==', project.id).get(),
+                    fetchAttendanceByProjectAndDate('attendance', project.id, fromNormEarly, toNormEarly)
+                ]);
+                const employees = [];
+                const attendance = {};
                 empSnap.forEach(doc => {
                     const data = doc.data();
-                    if (data.status !== 'hidden') allEmployees.push({ id: doc.id, ...data });
+                    if (data.status !== 'hidden') employees.push({ id: doc.id, ...data });
                 });
-                const fromNorm = toYyyyMmDd(fromDate) || fromDate;
-                const toNorm = toYyyyMmDd(toDate) || toDate;
-                const attSnap = await db.collection('attendance').where('projectId', '==', project.id).get();
                 attSnap.forEach(doc => {
                     const data = doc.data();
                     const dateStr = toYyyyMmDd(data.date);
-                    if (dateStr && dateStr >= fromNorm && dateStr <= toNorm) {
-                        if (!allAttendance[data.employeeId]) allAttendance[data.employeeId] = [];
-                        allAttendance[data.employeeId].push({ ...data, date: dateStr });
+                    if (dateStr && dateStr >= fromNormEarly && dateStr <= toNormEarly) {
+                        if (!attendance[data.employeeId]) attendance[data.employeeId] = [];
+                        attendance[data.employeeId].push({ ...data, date: dateStr });
                     }
                 });
+                return { employees, attendance };
+            }));
+            for (const result of wagesResults) {
+                allEmployees.push(...result.employees);
+                for (const [empId, records] of Object.entries(result.attendance)) {
+                    if (!allAttendance[empId]) allAttendance[empId] = [];
+                    allAttendance[empId].push(...records);
+                }
             }
 
             const fromNorm = toYyyyMmDd(fromDate) || fromDate;
@@ -9285,26 +9672,35 @@
 
             let allVehicles = [];
             let allVehicleAttendance = {};
-            for (const project of projects) {
-                const vehSnap = await db.collection('vehicles').where('projectId', '==', project.id).get();
+            const fromNormVeh = toYyyyMmDd(fromDate) || fromDate;
+            const toNormVeh = toYyyyMmDd(toDate) || toDate;
+            const vehicleResults = await Promise.all(projects.map(async project => {
+                const [vehSnap, vehAttSnap] = await Promise.all([
+                    db.collection('vehicles').where('projectId', '==', project.id).get(),
+                    fetchAttendanceByProjectAndDate('vehicleAttendance', project.id, fromNormVeh, toNormVeh)
+                ]);
+                const vehicles = [];
+                const vehicleAttendance = {};
                 vehSnap.forEach(doc => {
                     const data = doc.data();
-                    if (data.status !== 'hidden') {
-                        allVehicles.push({ id: doc.id, ...data });
-                    }
+                    if (data.status !== 'hidden') vehicles.push({ id: doc.id, ...data });
                 });
-
-                const fromNorm = toYyyyMmDd(fromDate) || fromDate;
-                const toNorm = toYyyyMmDd(toDate) || toDate;
-                const vehAttSnap = await db.collection('vehicleAttendance').where('projectId', '==', project.id).get();
                 vehAttSnap.forEach(doc => {
                     const data = doc.data();
                     const dateStr = toYyyyMmDd(data.date);
-                    if (dateStr && dateStr >= fromNorm && dateStr <= toNorm) {
-                        if (!allVehicleAttendance[data.vehicleId]) allVehicleAttendance[data.vehicleId] = [];
-                        allVehicleAttendance[data.vehicleId].push({ ...data, date: dateStr });
+                    if (dateStr && dateStr >= fromNormVeh && dateStr <= toNormVeh) {
+                        if (!vehicleAttendance[data.vehicleId]) vehicleAttendance[data.vehicleId] = [];
+                        vehicleAttendance[data.vehicleId].push({ ...data, date: dateStr });
                     }
                 });
+                return { vehicles, vehicleAttendance };
+            }));
+            for (const result of vehicleResults) {
+                allVehicles.push(...result.vehicles);
+                for (const [vehId, records] of Object.entries(result.vehicleAttendance)) {
+                    if (!allVehicleAttendance[vehId]) allVehicleAttendance[vehId] = [];
+                    allVehicleAttendance[vehId].push(...records);
+                }
             }
 
             // عرض الآليات التي لها حضور في الفترة فقط (نشط أو متوقف)
@@ -9488,10 +9884,16 @@
                 employeeMap.set(emp.id, emp);
             });
 
-            // جمع حضور الفترة لجميع المشاريع
+            // جمع حضور الفترة لجميع المشاريع بالتوازي
             const allAttendance = {};
-            for (const p of projects) {
-                const attSnap = await db.collection('attendance').where('projectId', '==', p.id).get();
+            const generalAttSnaps = await fetchAttendanceForProjects(
+                'attendance',
+                projects.map(p => p.id),
+                fromNorm,
+                toNorm
+            );
+            generalAttSnaps.forEach((attSnap, idx) => {
+                const p = projects[idx];
                 attSnap.forEach(doc => {
                     const data = doc.data();
                     const dateStr = toYyyyMmDd(data.date);
@@ -9506,7 +9908,7 @@
                         projectId: data.projectId || p.id
                     });
                 });
-            }
+            });
 
             // موظفون عاميون: كانوا يوميين في جزء من الفترة + لديهم حضور يومي فعلي (حسب typeHistory وتجاوز السجل)
             const employees = Array.from(employeeMap.values()).filter(emp => {
@@ -9740,8 +10142,14 @@
 
             // attendanceByVehicle[vehId][projectId] = { allDays, approvedDays }
             const attendanceByVehicle = {};
-            for (const p of projects) {
-                const attSnap = await db.collection('vehicleAttendance').where('projectId', '==', p.id).get();
+            const generalVehAttSnaps = await fetchAttendanceForProjects(
+                'vehicleAttendance',
+                projects.map(p => p.id),
+                fromNorm,
+                toNorm
+            );
+            generalVehAttSnaps.forEach((attSnap, idx) => {
+                const p = projects[idx];
                 attSnap.forEach(doc => {
                     const data = doc.data();
                     const dateStr = toYyyyMmDd(data.date);
@@ -9760,7 +10168,7 @@
                     attendanceByVehicle[vehId][p.id].allDays += dayValue;
                     if (data.approved === true) attendanceByVehicle[vehId][p.id].approvedDays += dayValue;
                 });
-            }
+            });
 
             const projectIdsInReportSet = new Set();
             vehicles.forEach(veh => {
@@ -11432,6 +11840,24 @@
                             <span class="font-medium">English</span>
                         </button>
                     </div>
+                </div>
+                
+                <div class="card p-6 mb-6">
+                    <h3 class="font-bold text-lg mb-4">🔄 ${currentLanguage === 'ar' ? 'إصدار النظام' : 'App version'}</h3>
+                    <p class="text-sm text-gray-600 mb-2">
+                        ${currentLanguage === 'ar' ? 'الإصدار الحالي لهذه الجلسة:' : 'Current session version:'}
+                        <span class="font-mono font-bold text-primary-700">v${APP_VERSION}</span>
+                    </p>
+                    <p class="text-xs text-gray-500 mb-4">
+                        ${currentLanguage === 'ar'
+                            ? 'عند نشر إصدار جديد يظهر شريط تنبيه لمن لديهم النظام مفتوحاً لطلب تحديث الصفحة.'
+                            : 'When a new version is published, users with the system open see a banner asking them to refresh.'}
+                    </p>
+                    ${currentUserData?.role === 'manager' ? `
+                    <button onclick="forceNotifyAppUpdate()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+                        ${currentLanguage === 'ar' ? 'إرسال إشعار تحديث للجميع' : 'Notify everyone to refresh'}
+                    </button>
+                    ` : ''}
                 </div>
                 
                 <div class="card p-6">
